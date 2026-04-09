@@ -19,6 +19,7 @@ type LineEndpointHandle = "start" | "end";
 type BaseDrawObject = {
   id: string;
   z: number;
+  parentId: string | null;
 };
 
 type BoxObject = BaseDrawObject & {
@@ -63,7 +64,7 @@ type MoveDragState = {
   kind: "move";
   objectId: string;
   startMouse: Point;
-  originalObject: DrawObject;
+  originalObjects: DrawObject[];
   pushedUndo: boolean;
   textEditOnClick: boolean;
 };
@@ -358,6 +359,48 @@ function getObjectBounds(object: DrawObject): Rect {
   }
 }
 
+function getBoxContentBounds(box: BoxObject): Rect {
+  return {
+    left: box.left + 1,
+    top: box.top + 1,
+    right: box.right - 1,
+    bottom: box.bottom - 1,
+  };
+}
+
+function rectContainsRect(outer: Rect, inner: Rect): boolean {
+  if (outer.left > outer.right || outer.top > outer.bottom) return false;
+  return (
+    inner.left >= outer.left &&
+    inner.right <= outer.right &&
+    inner.top >= outer.top &&
+    inner.bottom <= outer.bottom
+  );
+}
+
+function getRectArea(rect: Rect): number {
+  return Math.max(0, rect.right - rect.left + 1) * Math.max(0, rect.bottom - rect.top + 1);
+}
+
+function getBoundsUnion(objects: DrawObject[]): Rect | null {
+  if (objects.length === 0) return null;
+
+  let left = Number.POSITIVE_INFINITY;
+  let top = Number.POSITIVE_INFINITY;
+  let right = Number.NEGATIVE_INFINITY;
+  let bottom = Number.NEGATIVE_INFINITY;
+
+  for (const object of objects) {
+    const bounds = getObjectBounds(object);
+    left = Math.min(left, bounds.left);
+    top = Math.min(top, bounds.top);
+    right = Math.max(right, bounds.right);
+    bottom = Math.max(bottom, bounds.bottom);
+  }
+
+  return { left, top, right, bottom };
+}
+
 function getTextSelectionBounds(object: TextObject): Rect {
   const width = Math.max(1, visibleCellCount(object.content));
   return {
@@ -554,12 +597,11 @@ export class DrawState {
     this.cursorX = Math.max(0, Math.min(this.cursorX, this.canvasWidth - 1));
     this.cursorY = Math.max(0, Math.min(this.cursorY, this.canvasHeight - 1));
 
-    this.objects = this.objects.map((object) => this.shiftObjectInsideCanvas(object));
+    this.setObjects(this.objects.map((object) => this.shiftObjectInsideCanvas(object)));
     this.pendingLine = null;
     this.pendingBox = null;
     this.dragState = null;
     this.eraseState = null;
-    this.markSceneDirty();
   }
 
   public handlePointerEvent(event: PointerEventLike): void {
@@ -760,14 +802,16 @@ export class DrawState {
       return;
     }
 
-    const moved = this.translateObjectWithinCanvas(selected, dx, dy);
-    if (this.objectsEqual(moved, selected)) {
+    const tree = this.getObjectTree(selected.id);
+    const movedTree = this.translateObjectTreeWithinCanvas(tree, dx, dy);
+    const moved = movedTree.find((object) => object.id === selected.id)!;
+    if (this.objectListsEqual(movedTree, tree)) {
       this.setStatus(`${this.describeObject(selected)} is already at the edge.`);
       return;
     }
 
     this.pushUndo();
-    this.replaceObject(moved);
+    this.replaceObjects(movedTree);
     this.selectedObjectId = moved.id;
     this.activeTextObjectId = null;
     this.setStatus(`Moved ${this.describeObject(moved)}.`);
@@ -824,6 +868,7 @@ export class DrawState {
     const object: LineObject = {
       id: this.createObjectId(),
       z: this.allocateZIndex(),
+      parentId: null,
       type: "line",
       x1: this.cursorX,
       y1: this.cursorY,
@@ -831,10 +876,9 @@ export class DrawState {
       y2: this.cursorY,
       brush: this.brush,
     };
-    this.objects.push(object);
+    this.setObjects([...this.objects, object]);
     this.selectedObjectId = object.id;
     this.activeTextObjectId = null;
-    this.markSceneDirty();
     this.setStatus(`Stamped "${this.brush}" at ${this.cursorX + 1},${this.cursorY + 1}.`);
   }
 
@@ -865,17 +909,17 @@ export class DrawState {
     const object: TextObject = {
       id: this.createObjectId(),
       z: this.allocateZIndex(),
+      parentId: null,
       type: "text",
       x: this.cursorX,
       y: this.cursorY,
       content: char,
     };
-    this.objects.push(object);
+    this.setObjects([...this.objects, object]);
     this.selectedObjectId = object.id;
     this.activeTextObjectId = object.id;
     this.cursorX = Math.min(this.canvasWidth - 1, this.cursorX + 1);
-    this.markSceneDirty();
-    this.setStatus(`Created ${this.describeObject(object)}.`);
+    this.setStatus(`Created ${this.describeObject(this.getObjectById(object.id) ?? object)}.`);
   }
 
   public backspace(): void {
@@ -939,7 +983,7 @@ export class DrawState {
     }
 
     this.pushUndo();
-    this.objects = [];
+    this.setObjects([]);
     this.selectedObjectId = null;
     this.activeTextObjectId = null;
     this.pendingLine = null;
@@ -1064,7 +1108,7 @@ export class DrawState {
       kind: "move",
       objectId: object.id,
       startMouse: { x, y },
-      originalObject: cloneObject(object),
+      originalObjects: cloneObjects(this.getObjectTree(object.id)),
       pushedUndo: false,
       textEditOnClick,
     };
@@ -1101,16 +1145,16 @@ export class DrawState {
       const object: BoxObject = {
         id: this.createObjectId(),
         z: this.allocateZIndex(),
+        parentId: null,
         type: "box",
         left: rect.left,
         top: rect.top,
         right: rect.right,
         bottom: rect.bottom,
       };
-      this.objects.push(object);
+      this.setObjects([...this.objects, object]);
       this.selectedObjectId = object.id;
-      this.markSceneDirty();
-      this.setStatus(`Created ${this.describeObject(object)}.`);
+      this.setStatus(`Created ${this.describeObject(this.getObjectById(object.id) ?? object)}.`);
       return;
     }
 
@@ -1123,6 +1167,7 @@ export class DrawState {
       const object: LineObject = {
         id: this.createObjectId(),
         z: this.allocateZIndex(),
+        parentId: null,
         type: "line",
         x1: start.x,
         y1: start.y,
@@ -1130,10 +1175,9 @@ export class DrawState {
         y2: end.y,
         brush: this.brush,
       };
-      this.objects.push(object);
+      this.setObjects([...this.objects, object]);
       this.selectedObjectId = object.id;
-      this.markSceneDirty();
-      this.setStatus(`Created ${this.describeObject(object)}.`);
+      this.setStatus(`Created ${this.describeObject(this.getObjectById(object.id) ?? object)}.`);
       return;
     }
 
@@ -1182,68 +1226,83 @@ export class DrawState {
   }
 
   private updateDraggedObject(point: Point): void {
-    if (!this.dragState) return;
+    const dragState = this.dragState;
+    if (!dragState) return;
 
+    let nextObjects: DrawObject[];
     let nextObject: DrawObject;
 
-    switch (this.dragState.kind) {
+    switch (dragState.kind) {
       case "move": {
-        const dx = point.x - this.dragState.startMouse.x;
-        const dy = point.y - this.dragState.startMouse.y;
-        nextObject = this.translateObjectWithinCanvas(this.dragState.originalObject, dx, dy);
+        const dx = point.x - dragState.startMouse.x;
+        const dy = point.y - dragState.startMouse.y;
+        nextObjects = this.translateObjectTreeWithinCanvas(dragState.originalObjects, dx, dy);
+        nextObject = nextObjects.find((object) => object.id === dragState.objectId)!;
         break;
       }
       case "resize-box":
-        nextObject = this.resizeBoxWithinCanvas(
-          this.dragState.originalObject,
-          this.dragState.handle,
-          point,
-        );
+        nextObject = this.resizeBoxWithinCanvas(dragState.originalObject, dragState.handle, point);
+        nextObjects = [nextObject];
         break;
       case "line-endpoint":
         nextObject = this.adjustLineEndpointWithinCanvas(
-          this.dragState.originalObject,
-          this.dragState.endpoint,
+          dragState.originalObject,
+          dragState.endpoint,
           point,
         );
+        nextObjects = [nextObject];
         break;
     }
 
-    if (
-      !this.dragState.pushedUndo &&
-      !this.objectsEqual(nextObject, this.dragState.originalObject)
-    ) {
+    const changed =
+      dragState.kind === "move"
+        ? !this.objectListsEqual(nextObjects, dragState.originalObjects)
+        : !this.objectsEqual(nextObject, dragState.originalObject);
+
+    if (!dragState.pushedUndo && changed) {
       this.pushUndo();
-      this.dragState.pushedUndo = true;
-      nextObject = this.bringObjectToFront(nextObject);
-      this.syncDragStateZ(nextObject.z);
+      dragState.pushedUndo = true;
+      nextObjects = this.bringObjectsToFront(nextObjects);
+      nextObject = nextObjects.find((object) => object.id === dragState.objectId)!;
+      this.syncDragStateZ(nextObjects);
     }
 
-    this.replaceObject(nextObject);
+    this.replaceObjects(nextObjects);
     this.selectedObjectId = nextObject.id;
     this.activeTextObjectId = null;
 
-    if (this.dragState.kind === "resize-box") {
+    if (dragState.kind === "resize-box") {
       this.setStatus(`Resizing ${this.describeObject(nextObject)}.`);
-    } else if (this.dragState.kind === "line-endpoint") {
+    } else if (dragState.kind === "line-endpoint") {
       this.setStatus(`Adjusting ${this.describeObject(nextObject)}.`);
     } else {
       this.setStatus(`Moving ${this.describeObject(nextObject)}.`);
     }
   }
 
-  private syncDragStateZ(z: number): void {
+  private syncDragStateZ(objects: DrawObject[]): void {
     if (!this.dragState) return;
+
+    const zById = new Map(objects.map((object) => [object.id, object.z]));
 
     switch (this.dragState.kind) {
       case "move":
-        this.dragState.originalObject = { ...this.dragState.originalObject, z };
+        this.dragState.originalObjects = this.dragState.originalObjects.map((object) => ({
+          ...object,
+          z: zById.get(object.id) ?? object.z,
+        }));
         break;
       case "resize-box":
-        this.dragState.originalObject = { ...this.dragState.originalObject, z };
+        this.dragState.originalObject = {
+          ...this.dragState.originalObject,
+          z: zById.get(this.dragState.originalObject.id) ?? this.dragState.originalObject.z,
+        };
         break;
       case "line-endpoint":
-        this.dragState.originalObject = { ...this.dragState.originalObject, z };
+        this.dragState.originalObject = {
+          ...this.dragState.originalObject,
+          z: zById.get(this.dragState.originalObject.id) ?? this.dragState.originalObject.z,
+        };
         break;
     }
   }
@@ -1303,8 +1362,8 @@ export class DrawState {
   }
 
   private restoreSnapshot(snapshot: Snapshot): void {
-    this.objects = cloneObjects(snapshot.objects).map((object) =>
-      this.shiftObjectInsideCanvas(object),
+    this.objects = this.recomputeParentAssignments(
+      cloneObjects(snapshot.objects).map((object) => this.shiftObjectInsideCanvas(object)),
     );
     this.selectedObjectId = snapshot.selectedObjectId;
     this.cursorX = Math.max(0, Math.min(snapshot.cursorX, this.canvasWidth - 1));
@@ -1473,16 +1532,60 @@ export class DrawState {
     return object?.type === "text" ? object : null;
   }
 
-  private replaceObject(nextObject: DrawObject): void {
-    const index = this.objects.findIndex((object) => object.id === nextObject.id);
-    if (index < 0) return;
-    this.objects[index] = nextObject;
+  private getObjectTree(id: string, objects = this.objects): DrawObject[] {
+    const descendants = new Set<string>([id]);
+    let changed = true;
+
+    while (changed) {
+      changed = false;
+      for (const object of objects) {
+        if (object.parentId && descendants.has(object.parentId) && !descendants.has(object.id)) {
+          descendants.add(object.id);
+          changed = true;
+        }
+      }
+    }
+
+    return objects.filter((object) => descendants.has(object.id));
+  }
+
+  private recomputeParentAssignments(objects: DrawObject[]): DrawObject[] {
+    return objects.map((object) => {
+      const bounds = getObjectBounds(object);
+      const candidates = objects
+        .filter(
+          (candidate): candidate is BoxObject =>
+            candidate.type === "box" && candidate.id !== object.id,
+        )
+        .filter((candidate) => rectContainsRect(getBoxContentBounds(candidate), bounds))
+        .sort(
+          (a, b) =>
+            getRectArea(getBoxContentBounds(a)) - getRectArea(getBoxContentBounds(b)) || a.z - b.z,
+        );
+
+      return {
+        ...object,
+        parentId: candidates[0]?.id ?? null,
+      };
+    });
+  }
+
+  private setObjects(nextObjects: DrawObject[]): void {
+    this.objects = this.recomputeParentAssignments(nextObjects);
     this.markSceneDirty();
   }
 
+  private replaceObject(nextObject: DrawObject): void {
+    this.replaceObjects([nextObject]);
+  }
+
+  private replaceObjects(nextObjects: DrawObject[]): void {
+    const replacementMap = new Map(nextObjects.map((object) => [object.id, object]));
+    this.setObjects(this.objects.map((object) => replacementMap.get(object.id) ?? object));
+  }
+
   private removeObjectById(id: string): void {
-    this.objects = this.objects.filter((object) => object.id !== id);
-    this.markSceneDirty();
+    this.setObjects(this.objects.filter((object) => object.id !== id));
   }
 
   private findTopmostHandleAt(x: number, y: number): HandleHit | null {
@@ -1562,6 +1665,25 @@ export class DrawState {
     const dy = minDy <= maxDy ? clamp(desiredDy, minDy, maxDy) : desiredDy;
 
     return translateObject(object, dx, dy);
+  }
+
+  private translateObjectTreeWithinCanvas(
+    objects: DrawObject[],
+    desiredDx: number,
+    desiredDy: number,
+  ): DrawObject[] {
+    const bounds = getBoundsUnion(objects);
+    if (!bounds) return objects;
+
+    const minDx = -bounds.left;
+    const maxDx = this.canvasWidth - 1 - bounds.right;
+    const minDy = -bounds.top;
+    const maxDy = this.canvasHeight - 1 - bounds.bottom;
+
+    const dx = minDx <= maxDx ? clamp(desiredDx, minDx, maxDx) : desiredDx;
+    const dy = minDy <= maxDy ? clamp(desiredDy, minDy, maxDy) : desiredDy;
+
+    return objects.map((object) => translateObject(object, dx, dy));
   }
 
   private resizeBoxWithinCanvas(box: BoxObject, handle: BoxResizeHandle, point: Point): BoxObject {
@@ -1669,6 +1791,16 @@ export class DrawState {
     } as T;
   }
 
+  private bringObjectsToFront(objects: DrawObject[]): DrawObject[] {
+    const byId = new Map<string, DrawObject>();
+
+    for (const object of [...objects].sort((a, b) => a.z - b.z || a.id.localeCompare(b.id))) {
+      byId.set(object.id, this.bringObjectToFront(object));
+    }
+
+    return objects.map((object) => byId.get(object.id) ?? object);
+  }
+
   private createObjectId(): string {
     const id = `obj-${this.nextObjectNumber}`;
     this.nextObjectNumber += 1;
@@ -1698,6 +1830,7 @@ export class DrawState {
 
   private objectsEqual(a: DrawObject, b: DrawObject): boolean {
     if (a.type !== b.type) return false;
+    if (a.parentId !== b.parentId) return false;
 
     switch (a.type) {
       case "box":
@@ -1722,6 +1855,16 @@ export class DrawState {
           a.content === (b as TextObject).content
         );
     }
+  }
+
+  private objectListsEqual(a: DrawObject[], b: DrawObject[]): boolean {
+    if (a.length !== b.length) return false;
+
+    const byId = new Map(b.map((object) => [object.id, object]));
+    return a.every((object) => {
+      const other = byId.get(object.id);
+      return other ? this.objectsEqual(object, other) : false;
+    });
   }
 
   private isInsideCanvas(x: number, y: number): boolean {

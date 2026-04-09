@@ -42,6 +42,118 @@ describe("DrawState", () => {
     expect(state.getCompositeCell(2, 1)).toBe("┌");
   });
 
+  test("text inside a box moves with the box", () => {
+    const state = new DrawState(40, 16);
+    state.setMode("box");
+
+    const boxStart = canvasPoint(state, 0, 0);
+    const boxEnd = canvasPoint(state, 8, 4);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...boxStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...boxEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...boxEnd });
+
+    state.setMode("text");
+    const textStart = canvasPoint(state, 2, 2);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...textStart });
+    state.insertCharacter("H");
+
+    state.setMode("box");
+    const dragStart = canvasPoint(state, 0, 1);
+    const dragEnd = canvasPoint(state, 2, 2);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...dragStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...dragEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...dragEnd });
+
+    expect(state.getCompositeCell(2, 2)).toBe("┃");
+    expect(state.getCompositeCell(4, 3)).toBe("H");
+  });
+
+  test("line inside a box moves with the box", () => {
+    const state = new DrawState(40, 16);
+    state.setMode("box");
+
+    const boxStart = canvasPoint(state, 0, 0);
+    const boxEnd = canvasPoint(state, 8, 4);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...boxStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...boxEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...boxEnd });
+
+    state.setMode("line");
+    const lineStart = canvasPoint(state, 2, 2);
+    const lineEnd = canvasPoint(state, 4, 2);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...lineStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...lineEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...lineEnd });
+
+    const dragStart = canvasPoint(state, 0, 1);
+    const dragEnd = canvasPoint(state, 2, 2);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...dragStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...dragEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...dragEnd });
+
+    expect(state.getCompositeCell(3, 2)).toBe(" ");
+    expect(state.getCompositeCell(4, 3)).toBe("#");
+    expect(state.getCompositeCell(6, 3)).toBe("#");
+  });
+
+  test("a box inside a box moves with its parent", () => {
+    const state = new DrawState(40, 18);
+    state.setMode("box");
+
+    const outerStart = canvasPoint(state, 0, 0);
+    const outerEnd = canvasPoint(state, 10, 6);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...outerStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...outerEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...outerEnd });
+
+    const innerStart = canvasPoint(state, 2, 2);
+    const innerEnd = canvasPoint(state, 5, 4);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...innerStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...innerEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...innerEnd });
+
+    const dragStart = canvasPoint(state, 0, 1);
+    const dragEnd = canvasPoint(state, 3, 2);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...dragStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...dragEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...dragEnd });
+
+    expect(state.getCompositeCell(2, 2)).toBe(" ");
+    expect(state.getCompositeCell(5, 3)).toBe("┌");
+    expect(state.getCompositeCell(8, 5)).toBe("┘");
+  });
+
+  test("a child dragged outside a box no longer moves with it", () => {
+    const state = new DrawState(40, 16);
+    state.setMode("box");
+
+    const boxStart = canvasPoint(state, 0, 0);
+    const boxEnd = canvasPoint(state, 8, 4);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...boxStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...boxEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...boxEnd });
+
+    state.setMode("text");
+    const textStart = canvasPoint(state, 2, 2);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...textStart });
+    state.insertCharacter("H");
+
+    const textDragEnd = canvasPoint(state, 11, 2);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...textStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...textDragEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...textDragEnd });
+
+    state.setMode("box");
+    const dragStart = canvasPoint(state, 0, 1);
+    const dragEnd = canvasPoint(state, 2, 2);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...dragStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...dragEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...dragEnd });
+
+    expect(state.getCompositeCell(4, 3)).toBe(" ");
+    expect(state.getCompositeCell(11, 2)).toBe("H");
+  });
+
   test("selected boxes expose resize handles and can be resized from a corner", () => {
     const state = new DrawState(30, 12);
     state.setMode("box");
