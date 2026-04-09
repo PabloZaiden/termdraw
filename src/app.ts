@@ -16,6 +16,7 @@ import {
   truncateToCells,
   visibleCellCount,
   type BoxStyle,
+  type CanvasInsets,
   type DrawMode,
   type InkColor,
   type PointerEventLike,
@@ -59,6 +60,8 @@ const STARTUP_LOGO_LINES = [
   '   MMM   "YUMMMMP""MM,  MMM  M\'  "MMMMMMP"`   MMMM   "W" YMM   ""` "M "M"    MM',
 ] as const;
 const STARTUP_LOGO_CAPTION = "(c) 2026 Ben Vinegar  ·  Licensed under MIT";
+
+type ChromeMode = "full" | "editor";
 
 type AppLayout = {
   dividerX: number;
@@ -177,7 +180,25 @@ function isInsideRect(
   return x >= left && x < left + width && y >= top && y < top + height;
 }
 
-export interface TermDrawRenderableOptions extends RenderableOptions<TermDrawRenderable> {
+const FULL_CHROME_CANVAS_INSETS: CanvasInsets = {
+  left: 1,
+  top: 3,
+  right: 1,
+  bottom: 2,
+};
+
+const EDITOR_CANVAS_INSETS: CanvasInsets = {
+  left: 0,
+  top: 0,
+  right: 0,
+  bottom: 0,
+};
+
+function getCanvasInsets(chromeMode: ChromeMode): CanvasInsets {
+  return chromeMode === "full" ? FULL_CHROME_CANVAS_INSETS : EDITOR_CANVAS_INSETS;
+}
+
+export interface TermDrawRenderableOptions extends RenderableOptions<FrameBufferRenderable> {
   width?: number | "auto" | `${number}%`;
   height?: number | "auto" | `${number}%`;
   respectAlpha?: boolean;
@@ -186,10 +207,12 @@ export interface TermDrawRenderableOptions extends RenderableOptions<TermDrawRen
   autoFocus?: boolean;
   showStartupLogo?: boolean;
   cancelOnCtrlC?: boolean;
+  chromeMode?: ChromeMode;
 }
 
 export class TermDrawRenderable extends FrameBufferRenderable {
   private readonly state: DrawState;
+  private readonly chromeMode: ChromeMode;
   private onSaveCallback: ((art: string) => void) | null = null;
   private onCancelCallback: (() => void) | null = null;
   private autoFocusEnabled = false;
@@ -206,6 +229,7 @@ export class TermDrawRenderable extends FrameBufferRenderable {
       autoFocus = false,
       showStartupLogo = true,
       cancelOnCtrlC = false,
+      chromeMode = "full",
       respectAlpha,
       ...renderableOptions
     } = options;
@@ -216,9 +240,10 @@ export class TermDrawRenderable extends FrameBufferRenderable {
       height: typeof height === "number" ? height : 1,
       respectAlpha,
       ...renderableOptions,
-    } as any);
+    });
 
-    this.state = new DrawState(this.width, this.height);
+    this.chromeMode = chromeMode;
+    this.state = new DrawState(this.width, this.height, getCanvasInsets(this.chromeMode));
     this.focusable = true;
     this.onSave = onSave;
     this.onCancel = onCancel;
@@ -285,7 +310,7 @@ export class TermDrawRenderable extends FrameBufferRenderable {
       this.dismissStartupLogo();
     }
 
-    if (!this.state.hasActivePointerInteraction) {
+    if (this.chromeMode === "full" && layout && !this.state.hasActivePointerInteraction) {
       const toolButton = this.getToolButtons(layout).find((button) =>
         isInsideRect(x, y, button.left, button.top, button.width, button.height),
       );
@@ -354,14 +379,17 @@ export class TermDrawRenderable extends FrameBufferRenderable {
     const layout = this.syncCanvasLayout();
     this.frameBuffer.clear(COLORS.panel);
 
-    if (this.width < MIN_WIDTH || this.height < MIN_HEIGHT) {
-      this.drawTooSmallMessage();
-      super.renderSelf(buffer);
-      return;
+    if (this.chromeMode === "full") {
+      if (this.width < MIN_WIDTH || this.height < MIN_HEIGHT) {
+        this.drawTooSmallMessage();
+        super.renderSelf(buffer);
+        return;
+      }
+
+      this.drawChrome(layout!);
+      this.drawToolPalette(layout!);
     }
 
-    this.drawChrome(layout);
-    this.drawToolPalette(layout);
     this.drawCanvas();
     this.drawStartupLogo(layout);
     super.renderSelf(buffer);
@@ -568,9 +596,14 @@ export class TermDrawRenderable extends FrameBufferRenderable {
     this.requestRender();
   }
 
-  private syncCanvasLayout(): AppLayout {
+  private syncCanvasLayout(): AppLayout | null {
+    if (this.chromeMode === "editor") {
+      this.state.ensureCanvasSize(this.width, this.height, EDITOR_CANVAS_INSETS);
+      return null;
+    }
+
     const layout = this.getLayout();
-    this.state.ensureCanvasSize(layout.canvasViewWidth, this.height);
+    this.state.ensureCanvasSize(layout.canvasViewWidth, this.height, FULL_CHROME_CANVAS_INSETS);
     return layout;
   }
 
@@ -987,14 +1020,20 @@ export class TermDrawRenderable extends FrameBufferRenderable {
     }
   }
 
-  private drawStartupLogo(layout: AppLayout): void {
+  private drawStartupLogo(layout: AppLayout | null): void {
     if (!this.startupLogoEnabled || this.startupLogoDismissed) return;
 
     const logoWidth = Math.max(...STARTUP_LOGO_LINES.map((line) => visibleCellCount(line)));
     const logoHeight = STARTUP_LOGO_LINES.length;
     const captionWidth = visibleCellCount(STARTUP_LOGO_CAPTION);
-    const availableWidth = layout.dividerX - this.state.canvasLeftCol;
-    const availableHeight = layout.bodyBottom - this.state.canvasTopRow + 1;
+    const availableWidth =
+      this.chromeMode === "full" && layout
+        ? layout.dividerX - this.state.canvasLeftCol
+        : this.state.width;
+    const availableHeight =
+      this.chromeMode === "full" && layout
+        ? layout.bodyBottom - this.state.canvasTopRow + 1
+        : this.state.height;
     const showCaption = availableWidth >= captionWidth && availableHeight >= logoHeight + 2;
     const overlayHeight = showCaption ? logoHeight + 2 : logoHeight;
 
@@ -1042,6 +1081,25 @@ export class TermDrawRenderable extends FrameBufferRenderable {
       this.frameBuffer.setCell(x, y, "─", COLORS.border, COLORS.panel);
     }
     this.frameBuffer.setCell(this.width - 1, y, right, COLORS.border, COLORS.panel);
+  }
+}
+
+export type TermDrawAppRenderableOptions = Omit<TermDrawRenderableOptions, "chromeMode">;
+export type TermDrawEditorRenderableOptions = Omit<TermDrawRenderableOptions, "chromeMode">;
+
+export class TermDrawAppRenderable extends TermDrawRenderable {
+  constructor(ctx: RenderContext, options: TermDrawAppRenderableOptions = {}) {
+    super(ctx, { ...options, chromeMode: "full" });
+  }
+}
+
+export class TermDrawEditorRenderable extends TermDrawRenderable {
+  constructor(ctx: RenderContext, options: TermDrawEditorRenderableOptions = {}) {
+    super(ctx, {
+      ...options,
+      chromeMode: "editor",
+      showStartupLogo: options.showStartupLogo ?? false,
+    });
   }
 }
 

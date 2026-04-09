@@ -21,6 +21,12 @@ export type InkColor = (typeof INK_COLORS)[number];
 type CanvasGrid = string[][];
 type ColorGrid = (InkColor | null)[][];
 type Point = { x: number; y: number };
+export type CanvasInsets = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
 type Rect = { left: number; top: number; right: number; bottom: number };
 type ConnectionStyle = "light" | "heavy" | "double";
 type Direction = "n" | "e" | "s" | "w";
@@ -659,9 +665,15 @@ function objectContainsPoint(object: DrawObject, x: number, y: number): boolean 
   }
 }
 
+const DEFAULT_CANVAS_INSETS: CanvasInsets = {
+  left: 1,
+  top: 3,
+  right: 1,
+  bottom: 2,
+};
+
 export class DrawState {
-  public readonly canvasTopRow = 3;
-  public readonly canvasLeftCol = 1;
+  private canvasInsets: CanvasInsets = { ...DEFAULT_CANVAS_INSETS };
 
   private canvasWidth = 0;
   private canvasHeight = 0;
@@ -701,8 +713,8 @@ export class DrawState {
   private renderConnections: ConnectionGrid = [];
   private renderConnectionColors: ColorGrid = [];
 
-  constructor(viewWidth: number, viewHeight: number) {
-    this.ensureCanvasSize(viewWidth, viewHeight);
+  constructor(viewWidth: number, viewHeight: number, insets: CanvasInsets = DEFAULT_CANVAS_INSETS) {
+    this.ensureCanvasSize(viewWidth, viewHeight, insets);
   }
 
   public get currentMode(): DrawMode {
@@ -741,6 +753,14 @@ export class DrawState {
     return this.canvasHeight;
   }
 
+  public get canvasTopRow(): number {
+    return this.canvasInsets.top;
+  }
+
+  public get canvasLeftCol(): number {
+    return this.canvasInsets.left;
+  }
+
   public get hasSelectedObject(): boolean {
     return this.getSelectedObject() !== null;
   }
@@ -759,14 +779,27 @@ export class DrawState {
     );
   }
 
-  public ensureCanvasSize(viewWidth: number, viewHeight: number): void {
-    const nextCanvasWidth = Math.max(1, viewWidth - 2);
-    const nextCanvasHeight = Math.max(1, viewHeight - 5);
+  public ensureCanvasSize(
+    viewWidth: number,
+    viewHeight: number,
+    insets: CanvasInsets = this.canvasInsets,
+  ): void {
+    const nextInsets = { ...insets };
+    const nextCanvasWidth = Math.max(1, viewWidth - nextInsets.left - nextInsets.right);
+    const nextCanvasHeight = Math.max(1, viewHeight - nextInsets.top - nextInsets.bottom);
 
-    if (nextCanvasWidth === this.canvasWidth && nextCanvasHeight === this.canvasHeight) {
+    if (
+      nextCanvasWidth === this.canvasWidth &&
+      nextCanvasHeight === this.canvasHeight &&
+      nextInsets.left === this.canvasInsets.left &&
+      nextInsets.top === this.canvasInsets.top &&
+      nextInsets.right === this.canvasInsets.right &&
+      nextInsets.bottom === this.canvasInsets.bottom
+    ) {
       return;
     }
 
+    this.canvasInsets = nextInsets;
     this.canvasWidth = nextCanvasWidth;
     this.canvasHeight = nextCanvasHeight;
     this.cursorX = Math.max(0, Math.min(this.cursorX, this.canvasWidth - 1));

@@ -80,12 +80,18 @@ bun run start -- --fenced > drawing.md
 
 ## Embedding
 
-termDRAW! can also be mounted as an OpenTUI React component inside another terminal app.
+termDRAW! can also be mounted as OpenTUI React components inside another terminal app.
+
+- `TermDrawApp`: the full app chrome with header, palette, footer, and splash
+- `TermDrawEditor`: the bare editor surface without the surrounding app chrome
+- `TermDraw`: an alias for `TermDrawApp`
+
+Full chrome:
 
 ```tsx
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { TermDraw } from "termdraw";
+import { TermDrawApp } from "termdraw";
 
 const renderer = await createCliRenderer({
   useMouse: true,
@@ -95,7 +101,7 @@ const renderer = await createCliRenderer({
 });
 
 createRoot(renderer).render(
-  <TermDraw
+  <TermDrawApp
     width="100%"
     height="100%"
     autoFocus
@@ -107,6 +113,14 @@ createRoot(renderer).render(
     }}
   />,
 );
+```
+
+Bare editor surface:
+
+```tsx
+import { TermDrawEditor } from "termdraw";
+
+<TermDrawEditor width="100%" height="100%" autoFocus onSave={(art) => console.log(art)} />;
 ```
 
 ## Development

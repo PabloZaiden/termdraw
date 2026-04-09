@@ -1,7 +1,7 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { buildHelpText, formatSavedOutput } from "./app";
-import { TermDraw } from "./react";
+import { TermDrawApp } from "./react";
 
 interface CliOptions {
   outputPath?: string;
@@ -97,7 +97,7 @@ async function main(): Promise<void> {
   };
 
   root.render(
-    <TermDraw
+    <TermDrawApp
       width="100%"
       height="100%"
       autoFocus

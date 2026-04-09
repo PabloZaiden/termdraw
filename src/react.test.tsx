@@ -1,12 +1,22 @@
 import { expect, test } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
-import { TermDraw } from "./react";
+import { TermDraw, TermDrawApp, TermDrawEditor } from "./react";
 
-test("TermDraw renders as an OpenTUI React component and can save", async () => {
+function expectEmptySave(savedArt: string | null): void {
+  if (savedArt === null) {
+    throw new Error("Expected save callback to receive art.");
+  }
+
+  if (savedArt !== "") {
+    throw new Error(`Expected empty export, received ${JSON.stringify(savedArt)}.`);
+  }
+}
+
+test("TermDrawApp renders the full chrome and can save", async () => {
   let savedArt: string | null = null;
 
   const { captureCharFrame, mockInput, renderOnce } = await testRender(
-    <TermDraw
+    <TermDrawApp
       width="100%"
       height="100%"
       autoFocus
@@ -27,16 +37,61 @@ test("TermDraw renders as an OpenTUI React component and can save", async () => 
 
   const frame = captureCharFrame();
   expect(frame).toContain("termDRAW!");
+  expect(frame).toContain("Tools");
   expect(frame).toContain("LINE");
 
   mockInput.pressEnter();
   await renderOnce();
 
-  if (savedArt === null) {
-    throw new Error("Expected save callback to receive art.");
-  }
+  expectEmptySave(savedArt);
+});
 
-  if (savedArt !== "") {
-    throw new Error(`Expected empty export, received ${JSON.stringify(savedArt)}.`);
-  }
+test("TermDrawEditor renders without full chrome and can save", async () => {
+  let savedArt: string | null = null;
+
+  const { captureCharFrame, mockInput, renderOnce } = await testRender(
+    <TermDrawEditor
+      width="100%"
+      height="100%"
+      autoFocus
+      onSave={(art) => {
+        savedArt = art;
+      }}
+    />,
+    {
+      width: 32,
+      height: 10,
+      useMouse: true,
+      enableMouseMovement: true,
+    },
+  );
+
+  await renderOnce();
+
+  const frame = captureCharFrame();
+  expect(frame).not.toContain("termDRAW!");
+  expect(frame).not.toContain("Tools");
+
+  mockInput.pressEnter();
+  await renderOnce();
+
+  expectEmptySave(savedArt);
+});
+
+test("TermDraw remains an alias for the full app component", async () => {
+  const { captureCharFrame, renderOnce } = await testRender(
+    <TermDraw width="100%" height="100%" autoFocus showStartupLogo={false} />,
+    {
+      width: 64,
+      height: 26,
+      useMouse: true,
+      enableMouseMovement: true,
+    },
+  );
+
+  await renderOnce();
+
+  const frame = captureCharFrame();
+  expect(frame).toContain("termDRAW!");
+  expect(frame).toContain("Tools");
 });
