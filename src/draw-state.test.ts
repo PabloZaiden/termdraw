@@ -86,6 +86,32 @@ describe("DrawState", () => {
     expect(state.getCompositeCell(10, 2)).toBe("╝");
   });
 
+  test("objects use the active color and selected objects can be recolored", () => {
+    const state = new DrawState(30, 12);
+    state.setInkColor("cyan");
+
+    const start = canvasPoint(state, 0, 0);
+    const end = canvasPoint(state, 3, 0);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...start });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...end });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...end });
+
+    expect(state.getCompositeColor(0, 0)).toBe("cyan");
+
+    state.setInkColor("magenta");
+    expect(state.getCompositeColor(0, 0)).toBe("magenta");
+
+    state.setMode("box");
+    state.setInkColor("green");
+    const boxStart = canvasPoint(state, 6, 0);
+    const boxEnd = canvasPoint(state, 10, 2);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...boxStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...boxEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...boxEnd });
+
+    expect(state.getCompositeColor(6, 0)).toBe("green");
+  });
+
   test("text inside a box moves with the box", () => {
     const state = new DrawState(40, 16);
     state.setMode("box");

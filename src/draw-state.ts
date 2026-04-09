@@ -2,12 +2,24 @@ import { MouseButton } from "@opentui/core";
 
 export const BRUSHES = ["#", "*", "+", "-", "=", "x", "o", ".", "|", "/", "\\"] as const;
 export const BOX_STYLES = ["auto", "light", "heavy", "double"] as const;
+export const INK_COLORS = [
+  "white",
+  "red",
+  "orange",
+  "yellow",
+  "green",
+  "cyan",
+  "blue",
+  "magenta",
+] as const;
 const MAX_HISTORY = 100;
 const HANDLE_CHARACTER = "●";
 
 export type DrawMode = "box" | "line" | "text";
 export type BoxStyle = (typeof BOX_STYLES)[number];
+export type InkColor = (typeof INK_COLORS)[number];
 type CanvasGrid = string[][];
+type ColorGrid = (InkColor | null)[][];
 type Point = { x: number; y: number };
 type Rect = { left: number; top: number; right: number; bottom: number };
 type ConnectionStyle = "light" | "heavy" | "double";
@@ -22,6 +34,7 @@ type BaseDrawObject = {
   id: string;
   z: number;
   parentId: string | null;
+  color: InkColor;
 };
 
 type BoxObject = BaseDrawObject & {
@@ -229,6 +242,10 @@ function createCanvas(width: number, height: number): CanvasGrid {
   return Array.from({ length: height }, () => Array.from({ length: width }, () => " "));
 }
 
+function createColorGrid(width: number, height: number): ColorGrid {
+  return Array.from({ length: height }, () => Array.from({ length: width }, () => null));
+}
+
 function createCellConnections(): CellConnections {
   return {
     n: { light: 0, heavy: 0, double: 0 },
@@ -309,6 +326,25 @@ function adjustConnection(
   const opposite = OPPOSITE_DIRECTION[direction];
   const target = grid[ny]![nx]![opposite];
   target[style] = Math.max(0, target[style] + delta);
+}
+
+function paintConnectionColor(
+  grid: ColorGrid,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  direction: Direction,
+  color: InkColor,
+): void {
+  if (x < 0 || y < 0 || x >= width || y >= height) return;
+  const offset = DIRECTION_DELTAS[direction];
+  const nx = x + offset.dx;
+  const ny = y + offset.dy;
+  if (nx < 0 || ny < 0 || nx >= width || ny >= height) return;
+
+  grid[y]![x] = color;
+  grid[ny]![nx] = color;
 }
 
 function applyBoxPerimeter(
@@ -574,6 +610,8 @@ export class DrawState {
   private brushIndex = 0;
   private boxStyle = BOX_STYLES[0] as BoxStyle;
   private boxStyleIndex = 0;
+  private inkColor = INK_COLORS[0] as InkColor;
+  private inkColorIndex = 0;
 
   private objects: DrawObject[] = [];
   private selectedObjectId: string | null = null;
@@ -594,7 +632,9 @@ export class DrawState {
 
   private sceneDirty = true;
   private renderCanvas: CanvasGrid = [];
+  private renderCanvasColors: ColorGrid = [];
   private renderConnections: ConnectionGrid = [];
+  private renderConnectionColors: ColorGrid = [];
 
   constructor(viewWidth: number, viewHeight: number) {
     this.ensureCanvasSize(viewWidth, viewHeight);
@@ -610,6 +650,10 @@ export class DrawState {
 
   public get currentBoxStyle(): BoxStyle {
     return this.boxStyle;
+  }
+
+  public get currentInkColor(): InkColor {
+    return this.inkColor;
   }
 
   public get currentStatus(): string {
@@ -854,6 +898,18 @@ export class DrawState {
     return this.getConnectionGlyph(x, y);
   }
 
+  public getCompositeColor(x: number, y: number): InkColor | null {
+    this.ensureScene();
+    const ink = this.renderCanvas[y]![x] ?? " ";
+    if (ink !== " ") {
+      return this.renderCanvasColors[y]![x] ?? null;
+    }
+
+    return this.getConnectionGlyph(x, y) === " "
+      ? null
+      : (this.renderConnectionColors[y]![x] ?? null);
+  }
+
   public moveCursor(dx: number, dy: number): void {
     this.cursorX = Math.max(0, Math.min(this.canvasWidth - 1, this.cursorX + dx));
     this.cursorY = Math.max(0, Math.min(this.canvasHeight - 1, this.cursorY + dy));
@@ -896,6 +952,33 @@ export class DrawState {
     this.brushIndex = (this.brushIndex + direction + BRUSHES.length) % BRUSHES.length;
     this.brush = BRUSHES[this.brushIndex] ?? this.brush;
     this.setStatus(`Brush set to "${this.brush}".`);
+  }
+
+  public setInkColor(color: InkColor): void {
+    this.inkColor = color;
+    const idx = INK_COLORS.indexOf(color);
+    this.inkColorIndex = idx >= 0 ? idx : 0;
+
+    const selected = this.getSelectedObject();
+    if (!selected || selected.color === color) {
+      this.setStatus(`Color set to ${this.describeInkColor(color)}.`);
+      return;
+    }
+
+    this.pushUndo();
+    const recolored: DrawObject = {
+      ...selected,
+      color,
+    };
+    this.replaceObject(recolored);
+    this.selectedObjectId = recolored.id;
+    this.setStatus(`Applied ${this.describeInkColor(color)} to ${this.describeObject(recolored)}.`);
+  }
+
+  public cycleInkColor(direction: 1 | -1): void {
+    this.inkColorIndex = (this.inkColorIndex + direction + INK_COLORS.length) % INK_COLORS.length;
+    this.inkColor = INK_COLORS[this.inkColorIndex] ?? this.inkColor;
+    this.setStatus(`Color set to ${this.describeInkColor(this.inkColor)}.`);
   }
 
   public setBoxStyle(style: BoxStyle): void {
@@ -950,6 +1033,7 @@ export class DrawState {
       id: this.createObjectId(),
       z: this.allocateZIndex(),
       parentId: null,
+      color: this.inkColor,
       type: "line",
       x1: this.cursorX,
       y1: this.cursorY,
@@ -991,6 +1075,7 @@ export class DrawState {
       id: this.createObjectId(),
       z: this.allocateZIndex(),
       parentId: null,
+      color: this.inkColor,
       type: "text",
       x: this.cursorX,
       y: this.cursorY,
@@ -1228,6 +1313,7 @@ export class DrawState {
         id: this.createObjectId(),
         z: this.allocateZIndex(),
         parentId: null,
+        color: this.inkColor,
         type: "box",
         left: rect.left,
         top: rect.top,
@@ -1256,6 +1342,7 @@ export class DrawState {
         id: this.createObjectId(),
         z: this.allocateZIndex(),
         parentId: null,
+        color: this.inkColor,
         type: "line",
         x1: start.x,
         y1: start.y,
@@ -1481,7 +1568,9 @@ export class DrawState {
     if (!this.sceneDirty) return;
 
     this.renderCanvas = createCanvas(this.canvasWidth, this.canvasHeight);
+    this.renderCanvasColors = createColorGrid(this.canvasWidth, this.canvasHeight);
     this.renderConnections = createConnectionGrid(this.canvasWidth, this.canvasHeight);
+    this.renderConnectionColors = createColorGrid(this.canvasWidth, this.canvasHeight);
 
     const indexedObjects = this.objects.map((object, index) => ({ object, index }));
     indexedObjects.sort((a, b) => a.object.z - b.object.z || a.index - b.index);
@@ -1501,18 +1590,27 @@ export class DrawState {
               style,
               1,
             );
+            paintConnectionColor(
+              this.renderConnectionColors,
+              this.canvasWidth,
+              this.canvasHeight,
+              x,
+              y,
+              direction,
+              object.color,
+            );
           });
           break;
         }
         case "line": {
           for (const point of getLinePoints(object.x1, object.y1, object.x2, object.y2)) {
-            this.paintRenderCell(point.x, point.y, object.brush);
+            this.paintRenderCell(point.x, point.y, object.brush, object.color);
           }
           break;
         }
         case "text": {
           for (const [index, segment] of splitGraphemes(object.content).entries()) {
-            this.paintRenderCell(object.x + index, object.y, segment);
+            this.paintRenderCell(object.x + index, object.y, segment, object.color);
           }
           break;
         }
@@ -1522,9 +1620,10 @@ export class DrawState {
     this.sceneDirty = false;
   }
 
-  private paintRenderCell(x: number, y: number, char: string): void {
+  private paintRenderCell(x: number, y: number, char: string, color: InkColor): void {
     if (!this.isInsideCanvas(x, y)) return;
     this.renderCanvas[y]![x] = normalizeCellCharacter(char);
+    this.renderCanvasColors[y]![x] = color;
   }
 
   private getConnectionGlyph(x: number, y: number): string {
@@ -2065,6 +2164,27 @@ export class DrawState {
     }
   }
 
+  private describeInkColor(color: InkColor): string {
+    switch (color) {
+      case "white":
+        return "white";
+      case "red":
+        return "red";
+      case "orange":
+        return "orange";
+      case "yellow":
+        return "yellow";
+      case "green":
+        return "green";
+      case "cyan":
+        return "cyan";
+      case "blue":
+        return "blue";
+      case "magenta":
+        return "magenta";
+    }
+  }
+
   private describeObject(object: DrawObject): string {
     switch (object.type) {
       case "box":
@@ -2079,6 +2199,7 @@ export class DrawState {
   private objectsEqual(a: DrawObject, b: DrawObject): boolean {
     if (a.type !== b.type) return false;
     if (a.parentId !== b.parentId) return false;
+    if (a.color !== b.color) return false;
 
     switch (a.type) {
       case "box":

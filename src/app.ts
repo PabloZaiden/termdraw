@@ -11,21 +11,25 @@ import {
 } from "@opentui/core";
 import {
   DrawState,
+  INK_COLORS,
   padToWidth,
   truncateToCells,
   visibleCellCount,
   type BoxStyle,
   type DrawMode,
+  type InkColor,
   type PointerEventLike,
 } from "./draw-state";
 
 const MIN_WIDTH = 45;
-const MIN_HEIGHT = 18;
+const MIN_HEIGHT = 21;
 const TOOL_PALETTE_WIDTH = 17;
 const TOOL_BUTTON_WIDTH = 13;
 const BOX_STYLE_BUTTON_WIDTH = 10;
 const TOOL_BUTTON_HEIGHT = 3;
 const BOX_STYLE_ROW_COUNT = 4;
+const COLOR_SWATCH_WIDTH = 3;
+const COLOR_SWATCH_COLUMNS = 4;
 
 const COLORS = {
   background: RGBA.fromHex("#0f172a"),
@@ -85,12 +89,30 @@ type BoxStyleButton = {
   label: string;
 };
 
+type ColorSwatch = {
+  color: InkColor;
+  left: number;
+  top: number;
+  width: number;
+};
+
 const BOX_STYLE_OPTIONS: { style: BoxStyle; sample: string; label: string }[] = [
   { style: "auto", sample: "▣", label: "Auto" },
   { style: "light", sample: "┌─┐", label: "Single" },
   { style: "heavy", sample: "┏━┓", label: "Heavy" },
   { style: "double", sample: "╔═╗", label: "Double" },
 ];
+
+const INK_COLOR_VALUES: Record<InkColor, RGBA> = {
+  white: RGBA.fromHex("#e2e8f0"),
+  red: RGBA.fromHex("#ef4444"),
+  orange: RGBA.fromHex("#f97316"),
+  yellow: RGBA.fromHex("#eab308"),
+  green: RGBA.fromHex("#22c55e"),
+  cyan: RGBA.fromHex("#06b6d4"),
+  blue: RGBA.fromHex("#3b82f6"),
+  magenta: RGBA.fromHex("#d946ef"),
+};
 
 function isPrintableKey(key: KeyEvent): boolean {
   if (key.ctrl || key.meta || key.option) return false;
@@ -133,6 +155,14 @@ function getStartupLogoColor(rowIndex: number, colIndex: number, lineWidth: numb
 
 function getStartupLogoCaptionColor(): RGBA {
   return mixColor(COLORS.border, COLORS.text, 0.3);
+}
+
+function getInkColorValue(color: InkColor): RGBA {
+  return INK_COLOR_VALUES[color];
+}
+
+function getInkColorContrast(color: InkColor): RGBA {
+  return color === "white" || color === "yellow" ? COLORS.panel : COLORS.text;
 }
 
 function isInsideRect(
@@ -208,6 +238,20 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
         if (event.type === "down" && event.button === MouseButton.LEFT) {
           this.state.setMode("box");
           this.state.setBoxStyle(boxStyleButton.style);
+          this.requestRender();
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
+      const colorSwatch = this.getColorSwatches(layout).find((swatch) =>
+        isInsideRect(x, y, swatch.left, swatch.top, swatch.width, 1),
+      );
+
+      if (colorSwatch) {
+        if (event.type === "down" && event.button === MouseButton.LEFT) {
+          this.state.setInkColor(colorSwatch.color);
           this.requestRender();
         }
         event.preventDefault();
@@ -534,6 +578,21 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
     }));
   }
 
+  private getColorSwatches(layout: AppLayout): ColorSwatch[] {
+    const buttonLeft = this.getPaletteButtonLeft(layout);
+    const firstTop = layout.bodyTop;
+    const lineTop = firstTop + TOOL_BUTTON_HEIGHT + BOX_STYLE_ROW_COUNT;
+    const textTop = lineTop + TOOL_BUTTON_HEIGHT;
+    const colorTop = textTop + TOOL_BUTTON_HEIGHT + 1;
+
+    return INK_COLORS.map((color, index) => ({
+      color,
+      left: buttonLeft + (index % COLOR_SWATCH_COLUMNS) * COLOR_SWATCH_WIDTH,
+      top: colorTop + Math.floor(index / COLOR_SWATCH_COLUMNS),
+      width: COLOR_SWATCH_WIDTH,
+    }));
+  }
+
   private isCanvasChromeEvent(x: number, y: number, layout: AppLayout): boolean {
     return (
       x >= this.state.canvasLeftCol &&
@@ -629,7 +688,7 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
 
     if (this.state.currentMode === "line") {
       x = drawSegment(this.frameBuffer, x, y, "  brush:", COLORS.dim, COLORS.panel);
-      drawSegment(
+      x = drawSegment(
         this.frameBuffer,
         x,
         y,
@@ -642,7 +701,7 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
         BOX_STYLE_OPTIONS.find((option) => option.style === this.state.currentBoxStyle) ??
         BOX_STYLE_OPTIONS[0]!;
       x = drawSegment(this.frameBuffer, x, y, "  style:", COLORS.dim, COLORS.panel);
-      drawSegment(
+      x = drawSegment(
         this.frameBuffer,
         x,
         y,
@@ -651,6 +710,17 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
         COLORS.panel,
       );
     }
+
+    x = drawSegment(this.frameBuffer, x, y, "  color:", COLORS.dim, COLORS.panel);
+    drawSegment(
+      this.frameBuffer,
+      x,
+      y,
+      "●",
+      getInkColorValue(this.state.currentInkColor),
+      COLORS.panel,
+      TextAttributes.BOLD,
+    );
 
     const paletteTitle = padToWidth("Tools", paletteWidth);
     this.frameBuffer.drawText(
@@ -675,7 +745,7 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
 
   private drawFooterRow(layout: AppLayout): void {
     const text =
-      "Right palette tools/styles • click objects to move • drag box corners / line endpoints to edit • Esc deselect • Ctrl+Q quit";
+      "Right palette tools/styles/colors • click objects to move • drag box corners / line endpoints to edit • Esc deselect • Ctrl+Q quit";
     const combined = `${text}  ${this.state.currentStatus}`;
     const padded = padToWidth(combined, Math.max(1, this.width - 2));
     this.frameBuffer.drawText(padded, 1, layout.footerY, COLORS.dim, COLORS.panel);
@@ -696,6 +766,8 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
     for (const button of this.getBoxStyleButtons(layout)) {
       this.drawBoxStyleButton(button);
     }
+
+    this.drawColorPicker(layout);
   }
 
   private drawToolButton(button: ToolButton): void {
@@ -757,6 +829,35 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
     );
   }
 
+  private drawColorPicker(layout: AppLayout): void {
+    const buttonLeft = this.getPaletteButtonLeft(layout);
+    const firstTop = layout.bodyTop;
+    const lineTop = firstTop + TOOL_BUTTON_HEIGHT + BOX_STYLE_ROW_COUNT;
+    const textTop = lineTop + TOOL_BUTTON_HEIGHT;
+    const colorLabelTop = textTop + TOOL_BUTTON_HEIGHT;
+
+    this.frameBuffer.drawText("Color", buttonLeft, colorLabelTop, COLORS.dim, COLORS.panel);
+
+    for (const swatch of this.getColorSwatches(layout)) {
+      this.drawColorSwatch(swatch);
+    }
+  }
+
+  private drawColorSwatch(swatch: ColorSwatch): void {
+    const isActive = this.state.currentInkColor === swatch.color;
+    const bg = getInkColorValue(swatch.color);
+    const fg = getInkColorContrast(swatch.color);
+    const text = isActive ? " • " : "   ";
+    this.frameBuffer.drawText(
+      text,
+      swatch.left,
+      swatch.top,
+      fg,
+      bg,
+      isActive ? TextAttributes.BOLD : TextAttributes.NONE,
+    );
+  }
+
   private drawCanvas(): void {
     const preview = this.state.getActivePreviewCharacters();
     const selectedCells = this.state.getSelectedCellKeys();
@@ -770,6 +871,7 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
         const handleChar = handleChars.get(key);
         const previewChar = preview.get(key);
         const cell = handleChar ?? previewChar ?? this.state.getCompositeCell(x, y);
+        const cellColor = this.state.getCompositeColor(x, y);
         const isCursor = x === this.state.currentCursorX && y === this.state.currentCursorY;
         const isSelected = selectedCells.has(key);
         const isHandle = handleChar !== undefined;
@@ -780,8 +882,10 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
             : isSelected
               ? COLORS.selectionFg
               : previewChar
-                ? COLORS.preview
-                : COLORS.text;
+                ? getInkColorValue(this.state.currentInkColor)
+                : cellColor
+                  ? getInkColorValue(cellColor)
+                  : COLORS.text;
         const bg = isCursor
           ? COLORS.cursorBg
           : isHandle
@@ -864,7 +968,7 @@ export function buildHelpText(binaryName = "termdraw"): string {
   return truncateToCells(
     `${binaryName} [--output file] [--fenced|--plain]\n\n` +
       `Controls:\n` +
-      `  right palette   click Box / Line / Text and box styles\n` +
+      `  right palette   click Box / Line / Text, box styles, and colors\n` +
       `  Ctrl+T / Tab    cycle box / line / text\n` +
       `  click objects   select and move them\n` +
       `  drag handles    resize boxes / adjust line endpoints\n` +
