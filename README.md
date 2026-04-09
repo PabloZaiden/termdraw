@@ -1,82 +1,36 @@
 # termDRAW!
 
-termDRAW! is an OpenTUI + Bun + TypeScript clone of Ben Vinegar's Pi `/draw` extension.
+termDRAW! is an object-based terminal illustrator for diagrams, UI mocks, and terminal-native graphics.
 
-It opens a full-screen ASCII drawing canvas with mouse support, object-based drawing, undo/redo, and markdown-friendly export.
+## Why termDRAW!
 
-## Features
-
-- `line` mode for straight-line drawing
-- `box` mode with auto-connected box drawing glyphs
-- `text` mode for typing directly onto the canvas
-- drawn lines, boxes, and text persist as clickable movable objects
-- a right-side tool palette provides clickable `Box`, `Line`, and `Text` tools
-- boxes expose draggable corner handles for resizing when selected
-- lines expose draggable endpoint handles when selected
-- selected text shows a virtual bounding box for easier interaction
-- click objects directly to move/edit them without switching tools
-- shortcut help and live status sit in a bottom footer
-- right-drag to delete objects under the pointer
-- undo / redo / clear
-- save to stdout or a file
-
-## Requirements
-
-- [Bun](https://bun.sh)
-- a terminal with mouse support
+- Make terminal-native diagrams without leaving your terminal.
+- Keep editing as you think: drawn elements stay selectable, movable, and resizable.
+- Group related content inside boxes so diagrams stay organized while you iterate.
+- Export plain text or fenced Markdown for READMEs, docs, tickets, and agent prompts.
 
 ## Install
 
+Requirements:
+
+- [Bun](https://bun.sh)
+- A terminal with mouse support
+
 ```bash
+git clone https://github.com/benvinegar/termdraw.git
+cd termdraw
 bun install
 ```
 
-## Run
+## Quick start
 
-```bash
-bun run index.ts
-```
-
-Or with scripts:
+Start the app:
 
 ```bash
 bun run start
 ```
 
-## Controls
-
-- click the right-side tool palette, or use `Ctrl+T` / `Tab`: cycle `box` / `line` / `text`
-- `Ctrl+Z` / `Ctrl+Y`: undo / redo
-- `Ctrl+X`: clear
-- `[` / `]`: cycle brush in line mode
-- `Arrow keys`: move cursor, or nudge the selected object when one is selected
-- `Space`: stamp brush in line mode, or insert a space in text mode
-- `Delete`: remove the selected object
-- `Enter` or `Ctrl+S`: save
-- `Esc`: deselect
-- `Ctrl+Q` or `Ctrl+C`: quit without saving
-- mouse left-drag on a selected box corner: resize the box
-- mouse left-drag on a selected line endpoint: adjust that endpoint
-- mouse left-drag on an existing object: move it
-- mouse left-click on text in text mode: edit it
-- selected text can also be dragged from its virtual bounding box
-- mouse left-drag on empty space in draw modes: create a new object
-- mouse right-drag: delete objects under the pointer
-- mouse wheel: cycle brush in line mode
-
-## Output
-
-Plain text to stdout:
-
-```bash
-bun run index.ts > drawing.txt
-```
-
-Markdown fenced block:
-
-```bash
-bun run index.ts -- --fenced > drawing.md
-```
+Draw something, then press `Enter` or `Ctrl+S` to save. By default, termDRAW! writes the result to stdout after the app exits.
 
 Write directly to a file:
 
@@ -84,7 +38,49 @@ Write directly to a file:
 bun run index.ts -- --output diagram.txt
 ```
 
+Export as a fenced Markdown code block:
+
+```bash
+bun run index.ts -- --fenced > diagram.md
+```
+
+Show CLI help:
+
+```bash
+bun run index.ts -- --help
+```
+
+## Usage
+
+termDRAW! behaves more like a small vector-style editor than a paint program. Lines, boxes, and text are retained objects, so you can keep rearranging the diagram after you draw it. Boxes can also act as frames for fully contained children.
+
+Everything still snaps to terminal cells. termDRAW! outputs terminal art, not SVG or bitmap graphics.
+
+Controls are shown in the app footer and tool palette.
+
+## Output examples
+
+Plain text to stdout:
+
+```bash
+bun run index.ts > drawing.txt
+```
+
+Plain text to a file:
+
+```bash
+bun run index.ts -- --output drawing.txt
+```
+
+Markdown fenced output:
+
+```bash
+bun run index.ts -- --fenced > drawing.md
+```
+
 ## Development
+
+If you want to hack on termDRAW! locally:
 
 ```bash
 bun run format
@@ -93,11 +89,22 @@ bun test
 bun run typecheck
 ```
 
-## Git hooks
+## Contributing
 
-A pre-commit hook is installed via `simple-git-hooks` during `bun install`.
+Contributions are welcome.
 
-It runs on staged files with:
+Before opening a PR:
 
-- `oxfmt --write`
-- `oxlint --fix --quiet`
+- keep the change focused
+- run `bun run format`, `bun run lint`, `bun test`, and `bun run typecheck`
+- add or update tests when you change editor behavior
+- open an issue first for larger UX or architecture changes
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+## Support
+
+- Bugs and feature requests: [GitHub issues](https://github.com/benvinegar/termdraw/issues)
+- Source: [github.com/benvinegar/termdraw](https://github.com/benvinegar/termdraw)
