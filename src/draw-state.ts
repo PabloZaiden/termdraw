@@ -458,7 +458,7 @@ function objectContainsPoint(object: DrawObject, x: number, y: number): boolean 
 }
 
 export class DrawState {
-  public readonly canvasTopRow = 4;
+  public readonly canvasTopRow = 3;
   public readonly canvasLeftCol = 1;
 
   private canvasWidth = 0;
@@ -530,6 +530,15 @@ export class DrawState {
 
   public get isEditingText(): boolean {
     return this.getActiveTextObject() !== null;
+  }
+
+  public get hasActivePointerInteraction(): boolean {
+    return (
+      this.pendingLine !== null ||
+      this.pendingBox !== null ||
+      this.dragState !== null ||
+      this.eraseState !== null
+    );
   }
 
   public ensureCanvasSize(viewWidth: number, viewHeight: number): void {

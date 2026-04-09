@@ -1,6 +1,7 @@
 import {
   CliRenderEvents,
   FrameBufferRenderable,
+  MouseButton,
   RGBA,
   TextAttributes,
   type CliRenderer,
@@ -13,11 +14,15 @@ import {
   padToWidth,
   truncateToCells,
   visibleCellCount,
+  type DrawMode,
   type PointerEventLike,
 } from "./draw-state";
 
-const MIN_WIDTH = 24;
-const MIN_HEIGHT = 7;
+const MIN_WIDTH = 44;
+const MIN_HEIGHT = 15;
+const TOOL_PALETTE_WIDTH = 16;
+const TOOL_BUTTON_WIDTH = 10;
+const TOOL_BUTTON_HEIGHT = 3;
 
 const COLORS = {
   background: RGBA.fromHex("#0f172a"),
@@ -35,6 +40,27 @@ const COLORS = {
   handleBg: RGBA.fromHex("#0f172a"),
   cursorFg: RGBA.fromHex("#0f172a"),
   cursorBg: RGBA.fromHex("#f8fafc"),
+};
+
+type AppLayout = {
+  dividerX: number;
+  paletteLeft: number;
+  paletteWidth: number;
+  bodyTop: number;
+  bodyBottom: number;
+  footerY: number;
+  canvasViewWidth: number;
+};
+
+type ToolButton = {
+  mode: DrawMode;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  icon: string;
+  label: string;
+  color: RGBA;
 };
 
 function isPrintableKey(key: KeyEvent): boolean {
@@ -56,6 +82,17 @@ function drawSegment(
   if (text.length === 0) return x;
   buffer.drawText(text, x, y, fg, bg, attributes);
   return x + visibleCellCount(text);
+}
+
+function isInsideRect(
+  x: number,
+  y: number,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+) {
+  return x >= left && x < left + width && y >= top && y < top + height;
 }
 
 export class OpenTuiDrawApp extends FrameBufferRenderable {
@@ -84,15 +121,41 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
 
   protected override onResize(width: number, height: number): void {
     super.onResize(width, height);
-    this.state.ensureCanvasSize(width, height);
+    this.syncCanvasLayout();
   }
 
   protected override onMouseEvent(event: MouseEvent): void {
+    const layout = this.syncCanvasLayout();
+    const x = event.x - this.x;
+    const y = event.y - this.y;
+
+    if (!this.state.hasActivePointerInteraction) {
+      const toolButton = this.getToolButtons(layout).find((button) =>
+        isInsideRect(x, y, button.left, button.top, button.width, button.height),
+      );
+
+      if (toolButton) {
+        if (event.type === "down" && event.button === MouseButton.LEFT) {
+          this.state.setMode(toolButton.mode);
+          this.requestRender();
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
+      if (!this.isCanvasChromeEvent(x, y, layout)) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+    }
+
     const translated: PointerEventLike = {
       type: event.type,
       button: event.button,
-      x: event.x - this.x,
-      y: event.y - this.y,
+      x,
+      y,
       scrollDirection: event.scroll?.direction,
     };
 
@@ -103,7 +166,7 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
   }
 
   protected override renderSelf(buffer: OptimizedBuffer): void {
-    this.state.ensureCanvasSize(this.width, this.height);
+    const layout = this.syncCanvasLayout();
     this.frameBuffer.clear(COLORS.panel);
 
     if (this.width < MIN_WIDTH || this.height < MIN_HEIGHT) {
@@ -112,7 +175,8 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
       return;
     }
 
-    this.drawChrome();
+    this.drawChrome(layout);
+    this.drawToolPalette(layout);
     this.drawCanvas();
     super.renderSelf(buffer);
   }
@@ -286,6 +350,79 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
     }
   }
 
+  private syncCanvasLayout(): AppLayout {
+    const layout = this.getLayout();
+    this.state.ensureCanvasSize(layout.canvasViewWidth, this.height);
+    return layout;
+  }
+
+  private getLayout(): AppLayout {
+    const footerY = this.height - 2;
+    const bodyTop = 3;
+    const bodyBottom = this.height - 3;
+    const dividerX = this.width - TOOL_PALETTE_WIDTH - 2;
+
+    return {
+      dividerX,
+      paletteLeft: dividerX + 1,
+      paletteWidth: this.width - dividerX - 2,
+      bodyTop,
+      bodyBottom,
+      footerY,
+      canvasViewWidth: this.width - TOOL_PALETTE_WIDTH - 1,
+    };
+  }
+
+  private getToolButtons(layout: AppLayout): ToolButton[] {
+    const paletteInnerLeft = layout.paletteLeft + 1;
+    const paletteInnerWidth = this.width - paletteInnerLeft - 1;
+    const buttonLeft =
+      paletteInnerLeft + Math.max(0, Math.floor((paletteInnerWidth - TOOL_BUTTON_WIDTH) / 2));
+    const firstTop = layout.bodyTop + 1;
+
+    return [
+      {
+        mode: "box",
+        left: buttonLeft,
+        top: firstTop,
+        width: TOOL_BUTTON_WIDTH,
+        height: TOOL_BUTTON_HEIGHT,
+        icon: "▣",
+        label: "Box",
+        color: COLORS.warning,
+      },
+      {
+        mode: "line",
+        left: buttonLeft,
+        top: firstTop + TOOL_BUTTON_HEIGHT,
+        width: TOOL_BUTTON_WIDTH,
+        height: TOOL_BUTTON_HEIGHT,
+        icon: "╱",
+        label: "Line",
+        color: COLORS.accent,
+      },
+      {
+        mode: "text",
+        left: buttonLeft,
+        top: firstTop + TOOL_BUTTON_HEIGHT * 2,
+        width: TOOL_BUTTON_WIDTH,
+        height: TOOL_BUTTON_HEIGHT,
+        icon: "T",
+        label: "Text",
+        color: COLORS.success,
+      },
+    ];
+  }
+
+  private isCanvasChromeEvent(x: number, y: number, layout: AppLayout): boolean {
+    return (
+      x >= this.state.canvasLeftCol &&
+      x <= layout.dividerX - 1 &&
+      y >= this.state.canvasTopRow &&
+      y <= layout.bodyBottom
+    );
+  }
+
   private drawTooSmallMessage(): void {
     const width = this.width;
     const height = this.height;
@@ -310,21 +447,36 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
     }
   }
 
-  private drawChrome(): void {
-    const width = this.width;
-    const height = this.height;
-    const innerWidth = Math.max(1, width - 2);
-
+  private drawChrome(layout: AppLayout): void {
     this.drawHorizontalBorder(0, "╭", "╮");
-    this.drawHeaderRow(1, innerWidth);
-    this.drawStatusRow(2, innerWidth);
-    this.drawHorizontalBorder(3, "├", "┤");
-    this.drawHorizontalBorder(height - 1, "╰", "╯");
+    this.drawHorizontalBorder(this.height - 1, "╰", "╯");
+
+    for (let y = 1; y < this.height - 1; y += 1) {
+      this.drawOuterSideBorders(y);
+    }
+
+    for (let y = 1; y <= layout.bodyBottom; y += 1) {
+      this.frameBuffer.setCell(layout.dividerX, y, "│", COLORS.border, COLORS.panel);
+    }
+
+    this.drawHeaderRow(layout);
+    this.drawHeaderDivider(layout);
+    this.drawFooterRow(layout);
   }
 
-  private drawHeaderRow(y: number, innerWidth: number): void {
-    this.drawSideBorders(y);
-    this.frameBuffer.drawText(" ".repeat(innerWidth), 1, y, COLORS.text, COLORS.panel);
+  private drawHeaderRow(layout: AppLayout): void {
+    const y = 1;
+    const canvasHeaderWidth = Math.max(1, layout.dividerX - 1);
+    const paletteWidth = Math.max(1, this.width - layout.dividerX - 2);
+
+    this.frameBuffer.drawText(" ".repeat(canvasHeaderWidth), 1, y, COLORS.text, COLORS.panel);
+    this.frameBuffer.drawText(
+      " ".repeat(paletteWidth),
+      layout.dividerX + 1,
+      y,
+      COLORS.text,
+      COLORS.panel,
+    );
 
     let x = 1;
     x = drawSegment(
@@ -336,7 +488,7 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
       COLORS.panel,
       TextAttributes.BOLD,
     );
-    x = drawSegment(this.frameBuffer, x, y, "  mode:", COLORS.dim, COLORS.panel);
+    x = drawSegment(this.frameBuffer, x, y, "  tool:", COLORS.dim, COLORS.panel);
 
     const modeLabel = this.state.getModeLabel();
     const modeColor =
@@ -363,15 +515,91 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
       COLORS.accent,
       COLORS.panel,
     );
+
+    const paletteTitle = padToWidth("Tools", paletteWidth);
+    this.frameBuffer.drawText(
+      paletteTitle,
+      layout.dividerX + 1,
+      y,
+      COLORS.dim,
+      COLORS.panel,
+      TextAttributes.BOLD,
+    );
   }
 
-  private drawStatusRow(y: number, innerWidth: number): void {
-    this.drawSideBorders(y);
+  private drawHeaderDivider(layout: AppLayout): void {
+    const y = 2;
+    this.frameBuffer.setCell(0, y, "├", COLORS.border, COLORS.panel);
+    for (let x = 1; x < this.width - 1; x += 1) {
+      this.frameBuffer.setCell(x, y, "─", COLORS.border, COLORS.panel);
+    }
+    this.frameBuffer.setCell(layout.dividerX, y, "┼", COLORS.border, COLORS.panel);
+    this.frameBuffer.setCell(this.width - 1, y, "┤", COLORS.border, COLORS.panel);
+  }
+
+  private drawFooterRow(layout: AppLayout): void {
     const text =
-      "Enter save • Esc cancel • click objects to move • drag box corners / line endpoints to edit • selected text shows a virtual box • Delete removes selection";
+      "Right palette / Tab tool • click objects to move • drag box corners / line endpoints to edit • Del remove • Enter save";
     const combined = `${text}  ${this.state.currentStatus}`;
-    const padded = padToWidth(combined, innerWidth);
-    this.frameBuffer.drawText(padded, 1, y, COLORS.dim, COLORS.panel);
+    const padded = padToWidth(combined, Math.max(1, this.width - 2));
+    this.frameBuffer.drawText(padded, 1, layout.footerY, COLORS.dim, COLORS.panel);
+  }
+
+  private drawToolPalette(layout: AppLayout): void {
+    const paletteWidth = Math.max(1, this.width - layout.dividerX - 2);
+    const paletteX = layout.dividerX + 1;
+
+    for (let y = layout.bodyTop; y <= layout.bodyBottom; y += 1) {
+      this.frameBuffer.drawText(" ".repeat(paletteWidth), paletteX, y, COLORS.text, COLORS.panel);
+    }
+
+    for (const button of this.getToolButtons(layout)) {
+      this.drawToolButton(button);
+    }
+  }
+
+  private drawToolButton(button: ToolButton): void {
+    const isActive = this.state.currentMode === button.mode;
+    const fg = isActive ? COLORS.panel : button.color;
+    const bg = isActive ? button.color : COLORS.panel;
+    const borderColor = isActive ? button.color : COLORS.border;
+
+    this.frameBuffer.drawText(
+      `┌${"─".repeat(button.width - 2)}┐`,
+      button.left,
+      button.top,
+      borderColor,
+      COLORS.panel,
+      TextAttributes.BOLD,
+    );
+
+    const label = padToWidth(`${button.icon} ${button.label}`, button.width - 2);
+    this.frameBuffer.drawText(
+      "│",
+      button.left,
+      button.top + 1,
+      borderColor,
+      COLORS.panel,
+      TextAttributes.BOLD,
+    );
+    this.frameBuffer.drawText(label, button.left + 1, button.top + 1, fg, bg, TextAttributes.BOLD);
+    this.frameBuffer.drawText(
+      "│",
+      button.left + button.width - 1,
+      button.top + 1,
+      borderColor,
+      COLORS.panel,
+      TextAttributes.BOLD,
+    );
+
+    this.frameBuffer.drawText(
+      `└${"─".repeat(button.width - 2)}┘`,
+      button.left,
+      button.top + 2,
+      borderColor,
+      COLORS.panel,
+      TextAttributes.BOLD,
+    );
   }
 
   private drawCanvas(): void {
@@ -381,7 +609,6 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
 
     for (let y = 0; y < this.state.height; y += 1) {
       const rowY = this.state.canvasTopRow + y;
-      this.drawSideBorders(rowY);
 
       for (let x = 0; x < this.state.width; x += 1) {
         const key = `${x},${y}`;
@@ -409,12 +636,12 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
               : COLORS.panel;
         const attributes =
           isCursor || isSelected || isHandle ? TextAttributes.BOLD : TextAttributes.NONE;
-        this.frameBuffer.setCell(x + 1, rowY, cell, fg, bg, attributes);
+        this.frameBuffer.setCell(x + this.state.canvasLeftCol, rowY, cell, fg, bg, attributes);
       }
     }
   }
 
-  private drawSideBorders(y: number): void {
+  private drawOuterSideBorders(y: number): void {
     this.frameBuffer.setCell(0, y, "│", COLORS.border, COLORS.panel);
     this.frameBuffer.setCell(this.width - 1, y, "│", COLORS.border, COLORS.panel);
   }
@@ -438,16 +665,17 @@ export function buildHelpText(binaryName = "tui-draw"): string {
   return truncateToCells(
     `${binaryName} [--output file] [--fenced|--plain]\n\n` +
       `Controls:\n` +
-      `  Ctrl+T / Tab   cycle box / line / text\n` +
-      `  click objects  select and move them\n` +
-      `  drag corners   resize boxes / adjust line endpoints\n` +
-      `  selected text  shows a virtual selection box\n` +
-      `  Delete         remove selected object\n` +
+      `  right palette   click Box / Line / Text tools\n` +
+      `  Ctrl+T / Tab    cycle box / line / text\n` +
+      `  click objects   select and move them\n` +
+      `  drag handles    resize boxes / adjust line endpoints\n` +
+      `  selected text   shows a virtual selection box\n` +
+      `  Delete          remove selected object\n` +
       `  Ctrl+Z / Ctrl+Y undo / redo\n` +
-      `  Ctrl+X         clear canvas\n` +
-      `  [ / ]          cycle brush in line mode\n` +
-      `  Enter / Ctrl+S save\n` +
-      `  Esc / Ctrl+C   cancel\n\n` +
+      `  Ctrl+X          clear canvas\n` +
+      `  [ / ]           cycle brush in line mode\n` +
+      `  Enter / Ctrl+S  save\n` +
+      `  Esc / Ctrl+C    cancel\n\n` +
       `Options:\n` +
       `  -o, --output <file>  write the result to a file\n` +
       `  --fenced            output as a fenced markdown code block\n` +

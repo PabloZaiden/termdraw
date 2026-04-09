@@ -10,10 +10,12 @@ It opens a full-screen ASCII drawing canvas with mouse support, object-based dra
 - `box` mode with auto-connected box drawing glyphs
 - `text` mode for typing directly onto the canvas
 - drawn lines, boxes, and text persist as clickable movable objects
+- a right-side tool palette provides clickable `Box`, `Line`, and `Text` tools
 - boxes expose draggable corner handles for resizing when selected
 - lines expose draggable endpoint handles when selected
 - selected text shows a virtual bounding box for easier interaction
 - click objects directly to move/edit them without switching tools
+- shortcut help and live status sit in a bottom footer
 - right-drag to delete objects under the pointer
 - undo / redo / clear
 - save to stdout or a file
@@ -43,7 +45,7 @@ bun run start
 
 ## Controls
 
-- `Ctrl+T` or `Tab`: cycle `box` / `line` / `text`
+- click the right-side tool palette, or use `Ctrl+T` / `Tab`: cycle `box` / `line` / `text`
 - `Ctrl+Z` / `Ctrl+Y`: undo / redo
 - `Ctrl+X`: clear
 - `[` / `]`: cycle brush in line mode
