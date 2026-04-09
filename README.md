@@ -1,6 +1,6 @@
-# tui-draw
+# termDRAW!
 
-An OpenTUI + Bun + TypeScript clone of Ben Vinegar's Pi `/draw` extension.
+termDRAW! is an OpenTUI + Bun + TypeScript clone of Ben Vinegar's Pi `/draw` extension.
 
 It opens a full-screen ASCII drawing canvas with mouse support, object-based drawing, undo/redo, and markdown-friendly export.
 

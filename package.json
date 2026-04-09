@@ -1,5 +1,5 @@
 {
-  "name": "tui-draw",
+  "name": "termdraw",
   "private": true,
   "type": "module",
   "module": "index.ts",

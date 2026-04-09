@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "tui-draw",
+      "name": "termdraw",
       "dependencies": {
         "@opentui/core": "^0.1.97",
       },

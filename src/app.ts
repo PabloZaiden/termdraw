@@ -427,7 +427,7 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
     const width = this.width;
     const height = this.height;
     const lines = [
-      "Terminal too small for /draw.",
+      "Terminal too small for termDRAW!.",
       `Need at least ${MIN_WIDTH}x${MIN_HEIGHT}.`,
       "Resize and try again.",
     ];
@@ -483,7 +483,7 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
       this.frameBuffer,
       x,
       y,
-      "/draw",
+      "termDRAW!",
       COLORS.accent,
       COLORS.panel,
       TextAttributes.BOLD,
@@ -661,7 +661,7 @@ export function formatSavedOutput(art: string, fenced: boolean): string {
   return `\`\`\`text\n${content}\n\`\`\``;
 }
 
-export function buildHelpText(binaryName = "tui-draw"): string {
+export function buildHelpText(binaryName = "termdraw"): string {
   return truncateToCells(
     `${binaryName} [--output file] [--fenced|--plain]\n\n` +
       `Controls:\n` +
