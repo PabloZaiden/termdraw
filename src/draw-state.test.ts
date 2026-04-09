@@ -42,7 +42,7 @@ describe("DrawState", () => {
     expect(state.getCompositeCell(10, 4)).toBe(" ");
   });
 
-  test("nested boxes still alternate heavy and light borders", () => {
+  test("nested auto boxes still alternate heavy and light borders", () => {
     const state = new DrawState(30, 12);
     state.setMode("box");
 
@@ -60,6 +60,30 @@ describe("DrawState", () => {
 
     expect(state.getCompositeCell(0, 0)).toBe("┏");
     expect(state.getCompositeCell(2, 1)).toBe("┌");
+  });
+
+  test("box styles can draw single and double borders", () => {
+    const state = new DrawState(30, 12);
+    state.setMode("box");
+    state.setBoxStyle("light");
+
+    const lightStart = canvasPoint(state, 0, 0);
+    const lightEnd = canvasPoint(state, 4, 2);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...lightStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...lightEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...lightEnd });
+
+    state.setBoxStyle("double");
+    const doubleStart = canvasPoint(state, 6, 0);
+    const doubleEnd = canvasPoint(state, 10, 2);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...doubleStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...doubleEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...doubleEnd });
+
+    expect(state.getCompositeCell(0, 0)).toBe("┌");
+    expect(state.getCompositeCell(4, 2)).toBe("┘");
+    expect(state.getCompositeCell(6, 0)).toBe("╔");
+    expect(state.getCompositeCell(10, 2)).toBe("╝");
   });
 
   test("text inside a box moves with the box", () => {

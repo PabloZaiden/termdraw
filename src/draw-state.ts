@@ -1,16 +1,18 @@
 import { MouseButton } from "@opentui/core";
 
 export const BRUSHES = ["#", "*", "+", "-", "=", "x", "o", ".", "|", "/", "\\"] as const;
+export const BOX_STYLES = ["auto", "light", "heavy", "double"] as const;
 const MAX_HISTORY = 100;
 const HANDLE_CHARACTER = "●";
 
 export type DrawMode = "box" | "line" | "text";
+export type BoxStyle = (typeof BOX_STYLES)[number];
 type CanvasGrid = string[][];
 type Point = { x: number; y: number };
 type Rect = { left: number; top: number; right: number; bottom: number };
-type LineStyle = "light" | "heavy";
+type ConnectionStyle = "light" | "heavy" | "double";
 type Direction = "n" | "e" | "s" | "w";
-type DirectionCounts = { light: number; heavy: number };
+type DirectionCounts = { light: number; heavy: number; double: number };
 type CellConnections = Record<Direction, DirectionCounts>;
 type ConnectionGrid = CellConnections[][];
 type BoxResizeHandle = "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -28,6 +30,7 @@ type BoxObject = BaseDrawObject & {
   top: number;
   right: number;
   bottom: number;
+  style: BoxStyle;
 };
 
 type LineObject = BaseDrawObject & {
@@ -178,6 +181,25 @@ const HEAVY_GLYPHS: Record<number, string> = {
   15: "╋",
 };
 
+const DOUBLE_GLYPHS: Record<number, string> = {
+  0: " ",
+  1: "║",
+  2: "═",
+  3: "╚",
+  4: "║",
+  5: "║",
+  6: "╔",
+  7: "╠",
+  8: "═",
+  9: "╝",
+  10: "═",
+  11: "╩",
+  12: "╗",
+  13: "╣",
+  14: "╦",
+  15: "╬",
+};
+
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 function splitGraphemes(input: string): string[] {
@@ -209,10 +231,10 @@ function createCanvas(width: number, height: number): CanvasGrid {
 
 function createCellConnections(): CellConnections {
   return {
-    n: { light: 0, heavy: 0 },
-    e: { light: 0, heavy: 0 },
-    s: { light: 0, heavy: 0 },
-    w: { light: 0, heavy: 0 },
+    n: { light: 0, heavy: 0, double: 0 },
+    e: { light: 0, heavy: 0, double: 0 },
+    s: { light: 0, heavy: 0, double: 0 },
+    w: { light: 0, heavy: 0, double: 0 },
   };
 }
 
@@ -272,7 +294,7 @@ function adjustConnection(
   x: number,
   y: number,
   direction: Direction,
-  style: LineStyle,
+  style: ConnectionStyle,
   delta: number,
 ): void {
   if (x < 0 || y < 0 || x >= width || y >= height) return;
@@ -311,6 +333,38 @@ function applyBoxPerimeter(
     for (let y = rect.top; y < rect.bottom; y += 1) {
       applySegment(rect.right, y, "s");
     }
+  }
+}
+
+function getBoxBorderGlyphs(style: ConnectionStyle) {
+  switch (style) {
+    case "heavy":
+      return {
+        horizontal: "━",
+        vertical: "┃",
+        topLeft: "┏",
+        topRight: "┓",
+        bottomLeft: "┗",
+        bottomRight: "┛",
+      };
+    case "double":
+      return {
+        horizontal: "═",
+        vertical: "║",
+        topLeft: "╔",
+        topRight: "╗",
+        bottomLeft: "╚",
+        bottomRight: "╝",
+      };
+    case "light":
+      return {
+        horizontal: "─",
+        vertical: "│",
+        topLeft: "┌",
+        topRight: "┐",
+        bottomLeft: "└",
+        bottomRight: "┘",
+      };
   }
 }
 
@@ -518,6 +572,8 @@ export class DrawState {
   private mode: DrawMode = "line";
   private brush = BRUSHES[0] as string;
   private brushIndex = 0;
+  private boxStyle = BOX_STYLES[0] as BoxStyle;
+  private boxStyleIndex = 0;
 
   private objects: DrawObject[] = [];
   private selectedObjectId: string | null = null;
@@ -550,6 +606,10 @@ export class DrawState {
 
   public get currentBrush(): string {
     return this.brush;
+  }
+
+  public get currentBoxStyle(): BoxStyle {
+    return this.boxStyle;
   }
 
   public get currentStatus(): string {
@@ -611,10 +671,13 @@ export class DrawState {
 
   public handlePointerEvent(event: PointerEventLike): void {
     if (event.type === "scroll") {
+      const direction =
+        event.scrollDirection === "down" || event.scrollDirection === "left" ? -1 : 1;
+
       if (this.mode === "line") {
-        const direction =
-          event.scrollDirection === "down" || event.scrollDirection === "left" ? -1 : 1;
         this.cycleBrush(direction);
+      } else if (this.mode === "box") {
+        this.cycleBoxStyle(direction);
       }
       return;
     }
@@ -835,6 +898,19 @@ export class DrawState {
     this.setStatus(`Brush set to "${this.brush}".`);
   }
 
+  public setBoxStyle(style: BoxStyle): void {
+    this.boxStyle = style;
+    const idx = BOX_STYLES.indexOf(style);
+    this.boxStyleIndex = idx >= 0 ? idx : 0;
+    this.setStatus(`Box style set to ${this.describeBoxStyle(style)}.`);
+  }
+
+  public cycleBoxStyle(direction: 1 | -1): void {
+    this.boxStyleIndex = (this.boxStyleIndex + direction + BOX_STYLES.length) % BOX_STYLES.length;
+    this.boxStyle = BOX_STYLES[this.boxStyleIndex] ?? this.boxStyle;
+    this.setStatus(`Box style set to ${this.describeBoxStyle(this.boxStyle)}.`);
+  }
+
   public cycleMode(): void {
     const order: DrawMode[] = ["box", "line", "text"];
     const currentIndex = order.indexOf(this.mode);
@@ -859,7 +935,7 @@ export class DrawState {
       );
     } else if (next === "box") {
       this.setStatus(
-        "Box mode: drag on empty space to create a box. Click objects to move them, or drag box corners to resize.",
+        `Box mode (${this.describeBoxStyle(this.boxStyle)}): drag on empty space to create a box. Click objects to move them, or drag box corners to resize.`,
       );
     } else {
       this.setStatus(
@@ -1157,6 +1233,7 @@ export class DrawState {
         top: rect.top,
         right: rect.right,
         bottom: rect.bottom,
+        style: this.boxStyle,
       };
       this.setObjects([...this.objects, object]);
       this.selectedObjectId = object.id;
@@ -1412,7 +1489,7 @@ export class DrawState {
     for (const { object } of indexedObjects) {
       switch (object.type) {
         case "box": {
-          const style = this.getBoxStyle(object, object.id);
+          const style = this.resolveBoxConnectionStyle(object, object.style, object.id);
           applyBoxPerimeter(object, (x, y, direction) => {
             adjustConnection(
               this.renderConnections,
@@ -1455,20 +1532,24 @@ export class DrawState {
 
     let mask = 0;
     let hasHeavy = false;
+    let hasDouble = false;
 
     for (const direction of DIRECTIONS) {
       const counts = this.renderConnections[y]![x]![direction];
-      if (counts.light > 0 || counts.heavy > 0) {
+      if (counts.light > 0 || counts.heavy > 0 || counts.double > 0) {
         mask |= DIRECTION_BITS[direction];
       }
       if (counts.heavy > 0) {
         hasHeavy = true;
       }
+      if (counts.double > 0) {
+        hasDouble = true;
+      }
     }
 
     if (mask === 0) return " ";
-    const table = hasHeavy ? HEAVY_GLYPHS : LIGHT_GLYPHS;
-    return table[mask] ?? (hasHeavy ? "╋" : "┼");
+    const table = hasDouble ? DOUBLE_GLYPHS : hasHeavy ? HEAVY_GLYPHS : LIGHT_GLYPHS;
+    return table[mask] ?? (hasDouble ? "╬" : hasHeavy ? "╋" : "┼");
   }
 
   private getLinePreviewCharacters(): Map<string, string> {
@@ -1493,14 +1574,9 @@ export class DrawState {
     if (!this.pendingBox) return preview;
 
     const rect = normalizeRect(this.pendingBox.start, this.pendingBox.end);
-    const style = this.getBoxStyle(rect);
-
-    const horizontal = style === "heavy" ? "━" : "─";
-    const vertical = style === "heavy" ? "┃" : "│";
-    const topLeft = style === "heavy" ? "┏" : "┌";
-    const topRight = style === "heavy" ? "┓" : "┐";
-    const bottomLeft = style === "heavy" ? "┗" : "└";
-    const bottomRight = style === "heavy" ? "┛" : "┘";
+    const style = this.resolveBoxConnectionStyle(rect, this.boxStyle);
+    const { horizontal, vertical, topLeft, topRight, bottomLeft, bottomRight } =
+      getBoxBorderGlyphs(style);
 
     const setPreview = (x: number, y: number, value: string): void => {
       if (!this.isInsideCanvas(x, y)) return;
@@ -1524,7 +1600,19 @@ export class DrawState {
     return preview;
   }
 
-  private getBoxStyle(rect: Rect, ignoreId?: string): LineStyle {
+  private resolveBoxConnectionStyle(
+    rect: Rect,
+    style: BoxStyle,
+    ignoreId?: string,
+  ): ConnectionStyle {
+    if (style === "auto") {
+      return this.getAutoBoxConnectionStyle(rect, ignoreId);
+    }
+
+    return style;
+  }
+
+  private getAutoBoxConnectionStyle(rect: Rect, ignoreId?: string): ConnectionStyle {
     const depth = this.objects.filter((object) => {
       if (object.type !== "box") return false;
       if (object.id === ignoreId) return false;
@@ -1964,6 +2052,19 @@ export class DrawState {
     return `${rect.left + 1},${rect.top + 1} → ${rect.right + 1},${rect.bottom + 1}`;
   }
 
+  private describeBoxStyle(style: BoxStyle): string {
+    switch (style) {
+      case "auto":
+        return "Auto";
+      case "light":
+        return "Single";
+      case "heavy":
+        return "Heavy";
+      case "double":
+        return "Double";
+    }
+  }
+
   private describeObject(object: DrawObject): string {
     switch (object.type) {
       case "box":
@@ -1985,7 +2086,8 @@ export class DrawState {
           a.left === (b as BoxObject).left &&
           a.right === (b as BoxObject).right &&
           a.top === (b as BoxObject).top &&
-          a.bottom === (b as BoxObject).bottom
+          a.bottom === (b as BoxObject).bottom &&
+          a.style === (b as BoxObject).style
         );
       case "line":
         return (

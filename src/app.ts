@@ -14,15 +14,18 @@ import {
   padToWidth,
   truncateToCells,
   visibleCellCount,
+  type BoxStyle,
   type DrawMode,
   type PointerEventLike,
 } from "./draw-state";
 
-const MIN_WIDTH = 44;
-const MIN_HEIGHT = 15;
-const TOOL_PALETTE_WIDTH = 16;
-const TOOL_BUTTON_WIDTH = 10;
+const MIN_WIDTH = 45;
+const MIN_HEIGHT = 18;
+const TOOL_PALETTE_WIDTH = 17;
+const TOOL_BUTTON_WIDTH = 13;
+const BOX_STYLE_BUTTON_WIDTH = 10;
 const TOOL_BUTTON_HEIGHT = 3;
+const BOX_STYLE_ROW_COUNT = 4;
 
 const COLORS = {
   background: RGBA.fromHex("#0f172a"),
@@ -72,6 +75,22 @@ type ToolButton = {
   label: string;
   color: RGBA;
 };
+
+type BoxStyleButton = {
+  style: BoxStyle;
+  left: number;
+  top: number;
+  width: number;
+  sample: string;
+  label: string;
+};
+
+const BOX_STYLE_OPTIONS: { style: BoxStyle; sample: string; label: string }[] = [
+  { style: "auto", sample: "▣", label: "Auto" },
+  { style: "light", sample: "┌─┐", label: "Single" },
+  { style: "heavy", sample: "┏━┓", label: "Heavy" },
+  { style: "double", sample: "╔═╗", label: "Double" },
+];
 
 function isPrintableKey(key: KeyEvent): boolean {
   if (key.ctrl || key.meta || key.option) return false;
@@ -174,6 +193,21 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
       if (toolButton) {
         if (event.type === "down" && event.button === MouseButton.LEFT) {
           this.state.setMode(toolButton.mode);
+          this.requestRender();
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
+      const boxStyleButton = this.getBoxStyleButtons(layout).find((button) =>
+        isInsideRect(x, y, button.left, button.top, button.width, 1),
+      );
+
+      if (boxStyleButton) {
+        if (event.type === "down" && event.button === MouseButton.LEFT) {
+          this.state.setMode("box");
+          this.state.setBoxStyle(boxStyleButton.style);
           this.requestRender();
         }
         event.preventDefault();
@@ -331,6 +365,22 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
       return;
     }
 
+    if (this.state.currentMode === "box") {
+      if (key.raw === "[") {
+        key.preventDefault();
+        this.state.cycleBoxStyle(-1);
+        this.requestRender();
+        return;
+      }
+
+      if (key.raw === "]") {
+        key.preventDefault();
+        this.state.cycleBoxStyle(1);
+        this.requestRender();
+        return;
+      }
+    }
+
     if (this.state.currentMode === "line") {
       if (key.raw === "[") {
         key.preventDefault();
@@ -425,12 +475,15 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
     };
   }
 
+  private getPaletteButtonLeft(layout: AppLayout): number {
+    return layout.paletteLeft + 1;
+  }
+
   private getToolButtons(layout: AppLayout): ToolButton[] {
-    const paletteInnerLeft = layout.paletteLeft + 1;
-    const paletteInnerWidth = this.width - paletteInnerLeft - 1;
-    const buttonLeft =
-      paletteInnerLeft + Math.max(0, Math.floor((paletteInnerWidth - TOOL_BUTTON_WIDTH) / 2));
-    const firstTop = layout.bodyTop + 1;
+    const buttonLeft = this.getPaletteButtonLeft(layout);
+    const firstTop = layout.bodyTop;
+    const lineTop = firstTop + TOOL_BUTTON_HEIGHT + BOX_STYLE_ROW_COUNT;
+    const textTop = lineTop + TOOL_BUTTON_HEIGHT;
 
     return [
       {
@@ -446,7 +499,7 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
       {
         mode: "line",
         left: buttonLeft,
-        top: firstTop + TOOL_BUTTON_HEIGHT,
+        top: lineTop,
         width: TOOL_BUTTON_WIDTH,
         height: TOOL_BUTTON_HEIGHT,
         icon: "╱",
@@ -456,7 +509,7 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
       {
         mode: "text",
         left: buttonLeft,
-        top: firstTop + TOOL_BUTTON_HEIGHT * 2,
+        top: textTop,
         width: TOOL_BUTTON_WIDTH,
         height: TOOL_BUTTON_HEIGHT,
         icon: "T",
@@ -464,6 +517,21 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
         color: COLORS.success,
       },
     ];
+  }
+
+  private getBoxStyleButtons(layout: AppLayout): BoxStyleButton[] {
+    const buttonLeft = this.getPaletteButtonLeft(layout);
+    const firstTop = layout.bodyTop;
+    const stylesTop = firstTop + TOOL_BUTTON_HEIGHT;
+
+    return BOX_STYLE_OPTIONS.map((option, index) => ({
+      style: option.style,
+      left: buttonLeft,
+      top: stylesTop + index,
+      width: BOX_STYLE_BUTTON_WIDTH,
+      sample: option.sample,
+      label: option.label,
+    }));
   }
 
   private isCanvasChromeEvent(x: number, y: number, layout: AppLayout): boolean {
@@ -558,15 +626,31 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
       COLORS.panel,
       TextAttributes.BOLD,
     );
-    x = drawSegment(this.frameBuffer, x, y, "  brush:", COLORS.dim, COLORS.panel);
-    drawSegment(
-      this.frameBuffer,
-      x,
-      y,
-      `"${this.state.currentBrush}"`,
-      COLORS.accent,
-      COLORS.panel,
-    );
+
+    if (this.state.currentMode === "line") {
+      x = drawSegment(this.frameBuffer, x, y, "  brush:", COLORS.dim, COLORS.panel);
+      drawSegment(
+        this.frameBuffer,
+        x,
+        y,
+        `"${this.state.currentBrush}"`,
+        COLORS.accent,
+        COLORS.panel,
+      );
+    } else if (this.state.currentMode === "box") {
+      const boxStyle =
+        BOX_STYLE_OPTIONS.find((option) => option.style === this.state.currentBoxStyle) ??
+        BOX_STYLE_OPTIONS[0]!;
+      x = drawSegment(this.frameBuffer, x, y, "  style:", COLORS.dim, COLORS.panel);
+      drawSegment(
+        this.frameBuffer,
+        x,
+        y,
+        `${boxStyle.sample} ${boxStyle.label}`,
+        COLORS.warning,
+        COLORS.panel,
+      );
+    }
 
     const paletteTitle = padToWidth("Tools", paletteWidth);
     this.frameBuffer.drawText(
@@ -591,7 +675,7 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
 
   private drawFooterRow(layout: AppLayout): void {
     const text =
-      "Right palette / Tab tool • click objects to move • drag box corners / line endpoints to edit • Esc deselect • Ctrl+Q quit";
+      "Right palette tools/styles • click objects to move • drag box corners / line endpoints to edit • Esc deselect • Ctrl+Q quit";
     const combined = `${text}  ${this.state.currentStatus}`;
     const padded = padToWidth(combined, Math.max(1, this.width - 2));
     this.frameBuffer.drawText(padded, 1, layout.footerY, COLORS.dim, COLORS.panel);
@@ -607,6 +691,10 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
 
     for (const button of this.getToolButtons(layout)) {
       this.drawToolButton(button);
+    }
+
+    for (const button of this.getBoxStyleButtons(layout)) {
+      this.drawBoxStyleButton(button);
     }
   }
 
@@ -625,7 +713,7 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
       TextAttributes.BOLD,
     );
 
-    const label = padToWidth(`${button.icon} ${button.label}`, button.width - 2);
+    const label = padToWidth(` ${button.icon} ${button.label} `, button.width - 2);
     this.frameBuffer.drawText(
       "│",
       button.left,
@@ -651,6 +739,21 @@ export class OpenTuiDrawApp extends FrameBufferRenderable {
       borderColor,
       COLORS.panel,
       TextAttributes.BOLD,
+    );
+  }
+
+  private drawBoxStyleButton(button: BoxStyleButton): void {
+    const isActive = this.state.currentBoxStyle === button.style;
+    const fg = isActive ? COLORS.panel : COLORS.text;
+    const bg = isActive ? COLORS.warning : COLORS.panel;
+    const text = padToWidth(`${button.sample} ${button.label}`, button.width);
+    this.frameBuffer.drawText(
+      text,
+      button.left,
+      button.top,
+      fg,
+      bg,
+      isActive ? TextAttributes.BOLD : TextAttributes.NONE,
     );
   }
 
@@ -761,7 +864,7 @@ export function buildHelpText(binaryName = "termdraw"): string {
   return truncateToCells(
     `${binaryName} [--output file] [--fenced|--plain]\n\n` +
       `Controls:\n` +
-      `  right palette   click Box / Line / Text tools\n` +
+      `  right palette   click Box / Line / Text and box styles\n` +
       `  Ctrl+T / Tab    cycle box / line / text\n` +
       `  click objects   select and move them\n` +
       `  drag handles    resize boxes / adjust line endpoints\n` +
@@ -771,7 +874,8 @@ export function buildHelpText(binaryName = "termdraw"): string {
       `  Ctrl+Q          quit\n` +
       `  Ctrl+Z / Ctrl+Y undo / redo\n` +
       `  Ctrl+X          clear canvas\n` +
-      `  [ / ]           cycle brush in line mode\n` +
+      `  [ / ]           cycle box style or line brush\n` +
+      `  mouse wheel     cycle box style or line brush\n` +
       `  Space           stamp brush in line mode / insert space in text mode\n` +
       `  Enter / Ctrl+S  save\n\n` +
       `Options:\n` +
