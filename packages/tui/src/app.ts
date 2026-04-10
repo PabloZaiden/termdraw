@@ -208,6 +208,7 @@ export interface TermDrawRenderableOptions extends RenderableOptions<FrameBuffer
   autoFocus?: boolean;
   showStartupLogo?: boolean;
   cancelOnCtrlC?: boolean;
+  footerText?: string;
   chromeMode?: ChromeMode;
 }
 
@@ -220,6 +221,7 @@ export class TermDrawRenderable extends FrameBufferRenderable {
   private startupLogoEnabled = true;
   private startupLogoDismissed = false;
   private cancelOnCtrlCEnabled = false;
+  private footerTextOverride: string | null = null;
 
   constructor(ctx: RenderContext, options: TermDrawRenderableOptions = {}) {
     const {
@@ -230,6 +232,7 @@ export class TermDrawRenderable extends FrameBufferRenderable {
       autoFocus = false,
       showStartupLogo = true,
       cancelOnCtrlC = false,
+      footerText,
       chromeMode = "full",
       respectAlpha,
       ...renderableOptions
@@ -251,6 +254,7 @@ export class TermDrawRenderable extends FrameBufferRenderable {
     this.showStartupLogo = showStartupLogo;
     this.autoFocus = autoFocus;
     this.cancelOnCtrlC = cancelOnCtrlC;
+    this.footerText = footerText;
 
     if (width !== undefined) {
       this.width = width;
@@ -291,6 +295,11 @@ export class TermDrawRenderable extends FrameBufferRenderable {
 
   public set cancelOnCtrlC(value: boolean | undefined) {
     this.cancelOnCtrlCEnabled = value ?? false;
+  }
+
+  public set footerText(value: string | undefined) {
+    this.footerTextOverride = value?.trim() ? value : null;
+    this.requestRender();
   }
 
   public exportArt(): string {
@@ -880,6 +889,7 @@ export class TermDrawRenderable extends FrameBufferRenderable {
 
   private drawFooterRow(layout: AppLayout): void {
     const text =
+      this.footerTextOverride ??
       "Right palette tools/styles/colors • select tool can marquee multiple objects • drag box corners / line endpoints to edit • Esc deselect • Ctrl+Q quit";
     const combined = `${text}  ${this.state.currentStatus}`;
     const padded = padToWidth(combined, Math.max(1, this.width - 2));

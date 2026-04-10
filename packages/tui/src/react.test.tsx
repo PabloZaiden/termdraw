@@ -46,6 +46,30 @@ test("TermDrawApp renders the full chrome and can save", async () => {
   expectEmptySave(savedArt);
 });
 
+test("TermDrawApp supports custom footer text", async () => {
+  const { captureCharFrame, renderOnce } = await testRender(
+    <TermDrawApp
+      width="100%"
+      height="100%"
+      autoFocus
+      showStartupLogo={false}
+      footerText="Enter inserts into Pi • Ctrl+Q cancels"
+    />,
+    {
+      width: 96,
+      height: 29,
+      useMouse: true,
+      enableMouseMovement: true,
+    },
+  );
+
+  await renderOnce();
+
+  const frame = captureCharFrame();
+  expect(frame).toContain("Enter inserts into Pi");
+  expect(frame).toContain("Ctrl+Q cancels");
+});
+
 test("TermDrawEditor renders without full chrome and can save", async () => {
   let savedArt: string | null = null;
 

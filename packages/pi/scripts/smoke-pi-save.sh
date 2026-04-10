@@ -93,7 +93,7 @@ main() {
   wait_for_text 'termDRAW ready.' 30
 
   printf -- 'Waiting for automated save back into Pi...\n'
-  wait_for_text 'Inserted drawing into the Pi editor.' 30
+  wait_for_text 'Inserted drawing into editor.' 30
 
   assert_contains '```text'
   assert_contains "${SMOKE_TEXT}"

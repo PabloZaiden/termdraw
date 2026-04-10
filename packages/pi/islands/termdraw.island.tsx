@@ -5,9 +5,13 @@ import { TermDrawApp } from "@benvinegar/termdraw";
 
 type PiTermDrawIslandProps = {
   showStartupLogo?: boolean;
+  footerText?: string;
 };
 
-export default function PiTermDrawIsland({ showStartupLogo = false }: PiTermDrawIslandProps) {
+export default function PiTermDrawIsland({
+  showStartupLogo = false,
+  footerText,
+}: PiTermDrawIslandProps) {
   const bridge = useOpenTuiIslandBridge();
 
   return (
@@ -17,6 +21,7 @@ export default function PiTermDrawIsland({ showStartupLogo = false }: PiTermDraw
       autoFocus
       showStartupLogo={showStartupLogo}
       cancelOnCtrlC={false}
+      footerText={footerText}
       onSave={(art) => {
         bridge.emit({
           type: "save",
