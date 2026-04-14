@@ -120,8 +120,8 @@ const INK_COLOR_VALUES: Record<InkColor, RGBA> = {
 };
 
 const TOOL_HOTKEYS: Partial<Record<string, DrawMode>> = {
+  a: "select",
   b: "paint",
-  m: "select",
   p: "line",
   t: "text",
   u: "box",
@@ -909,7 +909,7 @@ export class TermDrawRenderable extends FrameBufferRenderable {
   private drawFooterRow(layout: AppLayout): void {
     const text =
       this.footerTextOverride ??
-      "B Brush • M Select • U Box • P Line • T Text • Esc Deselect • Enter/Ctrl+S Save • Ctrl+Q Quit";
+      "B Brush • A Select • U Box • P Line • T Text • Esc Deselect • Enter/Ctrl+S Save • Ctrl+Q Quit";
     const combined = `${text}  ${this.state.currentStatus}`;
     const padded = padToWidth(combined, Math.max(1, this.width - 2));
     this.frameBuffer.drawText(padded, 1, layout.footerY, COLORS.dim, COLORS.panel);
@@ -1168,7 +1168,7 @@ export function buildHelpText(binaryName = "termdraw"): string {
       `Controls:\n` +
       `  right palette   click Select / Box / Line / Brush / Text, box styles, and colors\n` +
       `  Ctrl+T / Tab    cycle select / box / line / brush / text\n` +
-      `  B / M / U / P / T switch to Brush / Select / Box / Line / Text outside text entry\n` +
+      `  B / A / U / P / T switch to Brush / Select / Box / Line / Text outside text entry\n` +
       `  select tool     click to select, drag empty space to marquee-select multiple objects\n` +
       `  click objects   select and move them\n` +
       `  drag handles    resize boxes / adjust line endpoints\n` +

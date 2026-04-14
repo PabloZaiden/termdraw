@@ -16,7 +16,7 @@ import {
 
 const TERM_DRAW_ISLAND_MODULE_URL = new URL("../islands/termdraw.island.tsx", import.meta.url);
 const PI_FOOTER_TEXT =
-  "B Brush • M Select • U Box • P Line • T Text • Enter/Ctrl+S Insert • Ctrl+Q Cancel";
+  "B Brush • A Select • U Box • P Line • T Text • Enter/Ctrl+S Insert • Ctrl+Q Cancel";
 const READY_STATUS = "termDRAW ready. Press Enter or Ctrl+S to insert into Pi. Ctrl+Q cancels.";
 const LOADING_STATUS = "Starting termDRAW in a Bun sidecar…";
 const INSERTED_MESSAGE = "Inserted drawing into editor.";

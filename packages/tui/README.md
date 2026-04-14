@@ -70,7 +70,7 @@ termDRAW! behaves more like a small vector-style editor than a paint program. Li
 
 Everything still snaps to terminal cells. termDRAW! outputs terminal art, not SVG or bitmap graphics.
 
-Controls are shown in the app footer and tool palette. Tool hotkeys follow common graphics-editor muscle memory: `B` Brush, `M` Select, `U` Box, `P` Line, `T` Text.
+Controls are shown in the app footer and tool palette. Tool hotkeys follow common graphics-editor muscle memory: `B` Brush, `A` Select, `U` Box, `P` Line, `T` Text.
 
 ## Output examples
 

@@ -65,7 +65,7 @@ test("TermDrawApp supports common graphics-app tool hotkeys", async () => {
   await renderOnce();
   expect(captureCharFrame()).toContain("BRUSH");
 
-  mockInput.pressKey("m");
+  mockInput.pressKey("a");
   await renderOnce();
   expect(captureCharFrame()).toContain("SELECT");
 
@@ -85,7 +85,7 @@ test("TermDrawApp supports common graphics-app tool hotkeys", async () => {
 test("help text documents brush naming and tool hotkeys", () => {
   const help = buildHelpText();
   expect(help).toContain("Select / Box / Line / Brush / Text");
-  expect(help).toContain("B / M / U / P / T");
+  expect(help).toContain("B / A / U / P / T");
 });
 
 test("TermDrawApp supports custom footer text", async () => {
