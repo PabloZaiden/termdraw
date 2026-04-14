@@ -119,6 +119,14 @@ const INK_COLOR_VALUES: Record<InkColor, RGBA> = {
   magenta: RGBA.fromHex("#d946ef"),
 };
 
+const TOOL_HOTKEYS: Partial<Record<string, DrawMode>> = {
+  b: "paint",
+  m: "select",
+  p: "line",
+  t: "text",
+  u: "box",
+};
+
 function isPrintableKey(key: KeyEvent): boolean {
   if (key.ctrl || key.meta || key.option) return false;
   if (!key.raw || key.raw.startsWith("\u001b")) return false;
@@ -436,6 +444,17 @@ export class TermDrawRenderable extends FrameBufferRenderable {
       return true;
     }
 
+    const toolHotkeyMode =
+      this.state.currentMode === "text" || key.ctrl || key.meta || key.option
+        ? null
+        : (TOOL_HOTKEYS[name] ?? null);
+    if (toolHotkeyMode) {
+      key.preventDefault();
+      this.state.setMode(toolHotkeyMode);
+      this.requestRender();
+      return true;
+    }
+
     if (key.ctrl && !key.shift && name === "z") {
       key.preventDefault();
       this.state.undo();
@@ -684,7 +703,7 @@ export class TermDrawRenderable extends FrameBufferRenderable {
         width: TOOL_BUTTON_WIDTH,
         height: TOOL_BUTTON_HEIGHT,
         icon: "▒",
-        label: "Paint",
+        label: "Brush",
         color: COLORS.paint,
       },
       {
@@ -890,7 +909,7 @@ export class TermDrawRenderable extends FrameBufferRenderable {
   private drawFooterRow(layout: AppLayout): void {
     const text =
       this.footerTextOverride ??
-      "Right palette tools/styles/colors • select tool can marquee multiple objects • drag box corners / line endpoints to edit • Esc deselect • Ctrl+Q quit";
+      "B Brush • M Select • U Box • P Line • T Text • Esc Deselect • Enter/Ctrl+S Save • Ctrl+Q Quit";
     const combined = `${text}  ${this.state.currentStatus}`;
     const padded = padToWidth(combined, Math.max(1, this.width - 2));
     this.frameBuffer.drawText(padded, 1, layout.footerY, COLORS.dim, COLORS.panel);
@@ -1147,8 +1166,9 @@ export function buildHelpText(binaryName = "termdraw"): string {
   return truncateToCells(
     `${binaryName} [--output file] [--fenced|--plain]\n\n` +
       `Controls:\n` +
-      `  right palette   click Select / Box / Line / Paint / Text, box styles, and colors\n` +
-      `  Ctrl+T / Tab    cycle select / box / line / paint / text\n` +
+      `  right palette   click Select / Box / Line / Brush / Text, box styles, and colors\n` +
+      `  Ctrl+T / Tab    cycle select / box / line / brush / text\n` +
+      `  B / M / U / P / T switch to Brush / Select / Box / Line / Text outside text entry\n` +
       `  select tool     click to select, drag empty space to marquee-select multiple objects\n` +
       `  click objects   select and move them\n` +
       `  drag handles    resize boxes / adjust line endpoints\n` +
@@ -1158,9 +1178,9 @@ export function buildHelpText(binaryName = "termdraw"): string {
       `  Ctrl+Q          quit\n` +
       `  Ctrl+Z / Ctrl+Y undo / redo\n` +
       `  Ctrl+X          clear canvas\n` +
-      `  [ / ]           cycle box style or paint/line brush\n` +
-      `  mouse wheel     cycle box style or paint/line brush\n` +
-      `  Space           stamp brush in paint/line mode / insert space in text mode\n` +
+      `  [ / ]           cycle box style or the current brush in Brush/Line mode\n` +
+      `  mouse wheel     cycle box style or the current brush in Brush/Line mode\n` +
+      `  Space           stamp the current brush in Brush/Line mode / insert space in Text mode\n` +
       `  Enter / Ctrl+S  save\n\n` +
       `Options:\n` +
       `  -o, --output <file>  write the result to a file\n` +

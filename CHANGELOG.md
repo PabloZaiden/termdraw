@@ -8,6 +8,8 @@ All notable user-visible changes to this project are documented in this file.
 
 ### Changed
 
+- Renamed the Paint tool to Brush in the UI and added single-key tool hotkeys: `B` Brush, `M` Select, `U` Box, `P` Line, and `T` Text.
+
 ### Fixed
 
 ## [0.2.0]

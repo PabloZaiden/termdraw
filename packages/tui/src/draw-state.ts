@@ -890,7 +890,7 @@ export class DrawState {
           point,
         );
         this.pendingPaint.lastPoint = point;
-        this.setStatus(`Painting to ${point.x + 1},${point.y + 1}.`);
+        this.setStatus(`Brush stroke to ${point.x + 1},${point.y + 1}.`);
         return;
       }
 
@@ -966,7 +966,7 @@ export class DrawState {
           points: [{ x: canvasX, y: canvasY }],
           lastPoint: { x: canvasX, y: canvasY },
         };
-        this.setStatus(`Paint start at ${canvasX + 1},${canvasY + 1}. Drag to paint.`);
+        this.setStatus(`Brush start at ${canvasX + 1},${canvasY + 1}. Drag to draw freehand.`);
         return;
       case "text":
         this.placeTextCursor(canvasX, canvasY);
@@ -983,7 +983,7 @@ export class DrawState {
       case "box":
         return "BOX";
       case "paint":
-        return "PAINT";
+        return "BRUSH";
       case "text":
         return "TEXT";
     }
@@ -1206,7 +1206,7 @@ export class DrawState {
       );
     } else if (next === "paint") {
       this.setStatus(
-        "Paint mode: drag on empty space to paint. Click objects to move them, and use the current brush for freehand strokes.",
+        "Brush mode: drag on empty space to draw freehand. Click objects to move them, and use the current brush for freehand strokes.",
       );
     } else {
       this.setStatus(
@@ -1231,7 +1231,7 @@ export class DrawState {
       this.setObjects([...this.objects, object]);
       this.setSelectedObjects([object.id], object.id);
       this.activeTextObjectId = null;
-      this.setStatus(`Painted "${this.brush}" at ${this.cursorX + 1},${this.cursorY + 1}.`);
+      this.setStatus(`Stamped brush "${this.brush}" at ${this.cursorX + 1},${this.cursorY + 1}.`);
       return;
     }
 
@@ -2602,7 +2602,7 @@ export class DrawState {
         return `line ${object.x1 + 1},${object.y1 + 1} → ${object.x2 + 1},${object.y2 + 1}`;
       case "paint": {
         const bounds = getObjectBounds(object);
-        return `paint ${this.describeRect(bounds)}`;
+        return `brush stroke ${this.describeRect(bounds)}`;
       }
       case "text":
         return `text "${object.content}" at ${object.x + 1},${object.y + 1}`;
