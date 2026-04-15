@@ -19,7 +19,50 @@ describe("DrawState", () => {
     state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...end });
     state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...end });
 
-    expect(state.exportArt()).toBe("####");
+    expect(state.exportArt()).toBe("────");
+  });
+
+  test("line tool auto-selects representative characters by angle", () => {
+    const state = new DrawState(20, 16);
+
+    const horizontalStart = canvasPoint(state, 0, 0);
+    const horizontalEnd = canvasPoint(state, 3, 0);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...horizontalStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...horizontalEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...horizontalEnd });
+    expect(state.exportArt()).toBe("────");
+
+    const verticalStart = canvasPoint(state, 0, 2);
+    const verticalEnd = canvasPoint(state, 0, 5);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...verticalStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...verticalEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...verticalEnd });
+    expect(state.getCompositeCell(0, 2)).toBe("│");
+    expect(state.getCompositeCell(0, 5)).toBe("│");
+
+    const diagonalDownStart = canvasPoint(state, 6, 0);
+    const diagonalDownEnd = canvasPoint(state, 9, 3);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...diagonalDownStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...diagonalDownEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...diagonalDownEnd });
+    expect(state.getCompositeCell(6, 0)).toBe("╲");
+    expect(state.getCompositeCell(9, 3)).toBe("╲");
+
+    const diagonalUpStart = canvasPoint(state, 9, 7);
+    const diagonalUpEnd = canvasPoint(state, 6, 10);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...diagonalUpStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...diagonalUpEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...diagonalUpEnd });
+    expect(state.getCompositeCell(9, 7)).toBe("╱");
+    expect(state.getCompositeCell(6, 10)).toBe("╱");
+
+    const shallowStart = canvasPoint(state, 11, 0);
+    const shallowEnd = canvasPoint(state, 18, 2);
+    state.handlePointerEvent({ type: "down", button: MouseButton.LEFT, ...shallowStart });
+    state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...shallowEnd });
+    state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...shallowEnd });
+    const shallowChar = state.getCompositeCell(12, 0);
+    expect((shallowChar.codePointAt(0) ?? 0) >= 0x2800).toBe(true);
   });
 
   test("clicking empty space in line mode does not create a one-cell line", () => {
@@ -203,8 +246,8 @@ describe("DrawState", () => {
     state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...dragEnd });
 
     expect(state.getCompositeCell(3, 2)).toBe(" ");
-    expect(state.getCompositeCell(4, 3)).toBe("#");
-    expect(state.getCompositeCell(6, 3)).toBe("#");
+    expect(state.getCompositeCell(4, 3)).toBe("─");
+    expect(state.getCompositeCell(6, 3)).toBe("─");
   });
 
   test("a box inside a box moves with its parent", () => {
@@ -289,9 +332,9 @@ describe("DrawState", () => {
     state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...resizeEnd });
     state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...resizeEnd });
 
-    expect(state.getCompositeCell(1, 2)).toBe("#");
-    expect(state.getCompositeCell(2, 2)).toBe("#");
-    expect(state.getCompositeCell(3, 2)).toBe("#");
+    expect(state.getCompositeCell(1, 2)).toBe("─");
+    expect(state.getCompositeCell(2, 2)).toBe("─");
+    expect(state.getCompositeCell(3, 2)).toBe("─");
     expect(state.getCompositeCell(4, 2)).toBe("┃");
   });
 
@@ -371,11 +414,13 @@ describe("DrawState", () => {
     state.handlePointerEvent({ type: "drag", button: MouseButton.LEFT, ...dragEndFinish });
     state.handlePointerEvent({ type: "up", button: MouseButton.LEFT, ...dragEndFinish });
 
-    expect(state.getCompositeCell(1, 1)).toBe("#");
-    expect(state.getCompositeCell(6, 2)).toBe("#");
+    const adjustedStart = state.getCompositeCell(1, 1);
+    const adjustedEnd = state.getCompositeCell(6, 2);
+    expect((adjustedStart.codePointAt(0) ?? 0) >= 0x2800).toBe(true);
+    expect((adjustedEnd.codePointAt(0) ?? 0) >= 0x2800).toBe(true);
 
     state.undo();
-    expect(state.getCompositeCell(4, 1)).toBe("#");
+    expect(state.getCompositeCell(4, 1)).toBe("─");
   });
 
   test("box objects can be clicked and dragged without a select mode", () => {

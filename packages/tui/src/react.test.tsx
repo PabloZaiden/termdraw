@@ -82,10 +82,34 @@ test("TermDrawApp supports common graphics-app tool hotkeys", async () => {
   expect(captureCharFrame()).toContain("TEXT");
 });
 
-test("help text documents brush naming and tool hotkeys", () => {
+test("TermDrawApp shows box styles contextually", async () => {
+  const { captureCharFrame, mockInput, renderOnce } = await testRender(
+    <TermDrawApp width="100%" height="100%" autoFocus showStartupLogo={false} />,
+    {
+      width: 64,
+      height: 29,
+      useMouse: true,
+      enableMouseMovement: true,
+    },
+  );
+
+  await renderOnce();
+  expect(captureCharFrame()).not.toContain("Single");
+
+  mockInput.pressKey("u");
+  await renderOnce();
+  const frame = captureCharFrame();
+  expect(frame).toContain("Single");
+  expect(frame).toContain("Double");
+});
+
+test("help text documents tool hotkeys and automatic line rendering", () => {
   const help = buildHelpText();
   expect(help).toContain("Select / Box / Line / Brush / Text");
   expect(help).toContain("B / A / U / P / T");
+  expect(help).toContain(
+    "automatically chooses clean line glyphs, using Braille for sub-cell shallow/steep angles",
+  );
 });
 
 test("TermDrawApp supports custom footer text", async () => {

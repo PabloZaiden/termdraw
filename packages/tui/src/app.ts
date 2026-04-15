@@ -26,9 +26,8 @@ const MIN_WIDTH = 45;
 const MIN_HEIGHT = 27;
 const TOOL_PALETTE_WIDTH = 17;
 const TOOL_BUTTON_WIDTH = 13;
-const BOX_STYLE_BUTTON_WIDTH = 10;
+const STYLE_BUTTON_WIDTH = 10;
 const TOOL_BUTTON_HEIGHT = 3;
-const BOX_STYLE_ROW_COUNT = 4;
 const COLOR_SWATCH_WIDTH = 3;
 const COLOR_SWATCH_COLUMNS = 4;
 
@@ -85,7 +84,7 @@ type ToolButton = {
   color: RGBA;
 };
 
-type BoxStyleButton = {
+type StyleButton = {
   style: BoxStyle;
   left: number;
   top: number;
@@ -343,14 +342,14 @@ export class TermDrawRenderable extends FrameBufferRenderable {
         return;
       }
 
-      const boxStyleButton = this.getBoxStyleButtons(layout).find((button) =>
+      const styleButton = this.getContextualStyleButtons(layout).find((button) =>
         isInsideRect(x, y, button.left, button.top, button.width, 1),
       );
 
-      if (boxStyleButton) {
+      if (styleButton) {
         if (event.type === "down" && event.button === MouseButton.LEFT) {
           this.state.setMode("box");
-          this.state.setBoxStyle(boxStyleButton.style);
+          this.state.setBoxStyle(styleButton.style);
           this.requestRender();
         }
         event.preventDefault();
@@ -547,7 +546,25 @@ export class TermDrawRenderable extends FrameBufferRenderable {
       }
     }
 
-    if (this.state.currentMode === "line" || this.state.currentMode === "paint") {
+    if (this.state.currentMode === "line") {
+      if (name === "space") {
+        key.preventDefault();
+        this.state.stampBrushAtCursor();
+        this.requestRender();
+        return true;
+      }
+
+      if (name === "backspace" || name === "delete") {
+        key.preventDefault();
+        this.state.eraseAtCursor();
+        this.requestRender();
+        return true;
+      }
+
+      return false;
+    }
+
+    if (this.state.currentMode === "paint") {
       if (key.raw === "[") {
         key.preventDefault();
         this.state.cycleBrush(-1);
@@ -657,79 +674,53 @@ export class TermDrawRenderable extends FrameBufferRenderable {
     return layout.paletteLeft + 1;
   }
 
-  private getToolButtons(layout: AppLayout): ToolButton[] {
-    const buttonLeft = this.getPaletteButtonLeft(layout);
-    const firstTop = layout.bodyTop;
-    const boxTop = firstTop + TOOL_BUTTON_HEIGHT;
-    const lineTop = boxTop + TOOL_BUTTON_HEIGHT + BOX_STYLE_ROW_COUNT;
-    const paintTop = lineTop + TOOL_BUTTON_HEIGHT;
-    const textTop = paintTop + TOOL_BUTTON_HEIGHT;
-
-    return [
-      {
-        mode: "select",
-        left: buttonLeft,
-        top: firstTop,
-        width: TOOL_BUTTON_WIDTH,
-        height: TOOL_BUTTON_HEIGHT,
-        icon: "◎",
-        label: "Select",
-        color: COLORS.select,
-      },
-      {
-        mode: "box",
-        left: buttonLeft,
-        top: boxTop,
-        width: TOOL_BUTTON_WIDTH,
-        height: TOOL_BUTTON_HEIGHT,
-        icon: "▣",
-        label: "Box",
-        color: COLORS.warning,
-      },
-      {
-        mode: "line",
-        left: buttonLeft,
-        top: lineTop,
-        width: TOOL_BUTTON_WIDTH,
-        height: TOOL_BUTTON_HEIGHT,
-        icon: "╱",
-        label: "Line",
-        color: COLORS.accent,
-      },
-      {
-        mode: "paint",
-        left: buttonLeft,
-        top: paintTop,
-        width: TOOL_BUTTON_WIDTH,
-        height: TOOL_BUTTON_HEIGHT,
-        icon: "▒",
-        label: "Brush",
-        color: COLORS.paint,
-      },
-      {
-        mode: "text",
-        left: buttonLeft,
-        top: textTop,
-        width: TOOL_BUTTON_WIDTH,
-        height: TOOL_BUTTON_HEIGHT,
-        icon: "T",
-        label: "Text",
-        color: COLORS.success,
-      },
-    ];
+  private getContextualStyleRowCount(): number {
+    return this.state.currentMode === "box" ? BOX_STYLE_OPTIONS.length : 0;
   }
 
-  private getBoxStyleButtons(layout: AppLayout): BoxStyleButton[] {
+  private getToolButtons(layout: AppLayout): ToolButton[] {
     const buttonLeft = this.getPaletteButtonLeft(layout);
-    const firstTop = layout.bodyTop;
-    const boxTop = firstTop + TOOL_BUTTON_HEIGHT;
-    const stylesTop = boxTop + TOOL_BUTTON_HEIGHT;
+    const definitions: Omit<ToolButton, "left" | "top" | "width" | "height">[] = [
+      { mode: "select", icon: "◎", label: "Select", color: COLORS.select },
+      { mode: "box", icon: "▣", label: "Box", color: COLORS.warning },
+      { mode: "line", icon: "╱", label: "Line", color: COLORS.accent },
+      { mode: "paint", icon: "▒", label: "Brush", color: COLORS.paint },
+      { mode: "text", icon: "T", label: "Text", color: COLORS.success },
+    ];
+
+    const buttons: ToolButton[] = [];
+    let top = layout.bodyTop;
+
+    for (const definition of definitions) {
+      buttons.push({
+        ...definition,
+        left: buttonLeft,
+        top,
+        width: TOOL_BUTTON_WIDTH,
+        height: TOOL_BUTTON_HEIGHT,
+      });
+      top += TOOL_BUTTON_HEIGHT;
+
+      if (definition.mode === this.state.currentMode) {
+        top += this.getContextualStyleRowCount();
+      }
+    }
+
+    return buttons;
+  }
+
+  private getContextualStyleButtons(layout: AppLayout): StyleButton[] {
+    if (this.state.currentMode !== "box") return [];
+
+    const buttonLeft = this.getPaletteButtonLeft(layout);
+    const activeButton = this.getToolButtons(layout).find((button) => button.mode === "box");
+    if (!activeButton) return [];
 
     return BOX_STYLE_OPTIONS.map((option, index) => ({
       style: option.style,
       left: buttonLeft,
-      top: stylesTop + index,
-      width: BOX_STYLE_BUTTON_WIDTH,
+      top: activeButton.top + TOOL_BUTTON_HEIGHT + index,
+      width: STYLE_BUTTON_WIDTH,
       sample: option.sample,
       label: option.label,
     }));
@@ -737,12 +728,9 @@ export class TermDrawRenderable extends FrameBufferRenderable {
 
   private getColorSwatches(layout: AppLayout): ColorSwatch[] {
     const buttonLeft = this.getPaletteButtonLeft(layout);
-    const firstTop = layout.bodyTop;
-    const boxTop = firstTop + TOOL_BUTTON_HEIGHT;
-    const lineTop = boxTop + TOOL_BUTTON_HEIGHT + BOX_STYLE_ROW_COUNT;
-    const paintTop = lineTop + TOOL_BUTTON_HEIGHT;
-    const textTop = paintTop + TOOL_BUTTON_HEIGHT;
-    const colorTop = textTop + TOOL_BUTTON_HEIGHT + 1;
+    const toolButtons = this.getToolButtons(layout);
+    const lastButton = toolButtons[toolButtons.length - 1];
+    const colorTop = (lastButton?.top ?? layout.bodyTop) + TOOL_BUTTON_HEIGHT + 1;
 
     return INK_COLORS.map((color, index) => ({
       color,
@@ -849,14 +837,14 @@ export class TermDrawRenderable extends FrameBufferRenderable {
       TextAttributes.BOLD,
     );
 
-    if (this.state.currentMode === "line" || this.state.currentMode === "paint") {
+    if (this.state.currentMode === "paint") {
       x = drawSegment(this.frameBuffer, x, y, "  brush:", COLORS.dim, COLORS.panel);
       x = drawSegment(
         this.frameBuffer,
         x,
         y,
         `"${this.state.currentBrush}"`,
-        this.state.currentMode === "paint" ? COLORS.paint : COLORS.accent,
+        COLORS.paint,
         COLORS.panel,
       );
     } else if (this.state.currentMode === "box") {
@@ -927,8 +915,8 @@ export class TermDrawRenderable extends FrameBufferRenderable {
       this.drawToolButton(button);
     }
 
-    for (const button of this.getBoxStyleButtons(layout)) {
-      this.drawBoxStyleButton(button);
+    for (const button of this.getContextualStyleButtons(layout)) {
+      this.drawStyleButton(button);
     }
 
     this.drawColorPicker(layout);
@@ -978,7 +966,7 @@ export class TermDrawRenderable extends FrameBufferRenderable {
     );
   }
 
-  private drawBoxStyleButton(button: BoxStyleButton): void {
+  private drawStyleButton(button: StyleButton): void {
     const isActive = this.state.currentBoxStyle === button.style;
     const fg = isActive ? COLORS.panel : COLORS.text;
     const bg = isActive ? COLORS.warning : COLORS.panel;
@@ -995,12 +983,9 @@ export class TermDrawRenderable extends FrameBufferRenderable {
 
   private drawColorPicker(layout: AppLayout): void {
     const buttonLeft = this.getPaletteButtonLeft(layout);
-    const firstTop = layout.bodyTop;
-    const boxTop = firstTop + TOOL_BUTTON_HEIGHT;
-    const lineTop = boxTop + TOOL_BUTTON_HEIGHT + BOX_STYLE_ROW_COUNT;
-    const paintTop = lineTop + TOOL_BUTTON_HEIGHT;
-    const textTop = paintTop + TOOL_BUTTON_HEIGHT;
-    const colorLabelTop = textTop + TOOL_BUTTON_HEIGHT;
+    const toolButtons = this.getToolButtons(layout);
+    const lastButton = toolButtons[toolButtons.length - 1];
+    const colorLabelTop = (lastButton?.top ?? layout.bodyTop) + TOOL_BUTTON_HEIGHT;
 
     this.frameBuffer.drawText("Color", buttonLeft, colorLabelTop, COLORS.dim, COLORS.panel);
 
@@ -1172,15 +1157,16 @@ export function buildHelpText(binaryName = "termdraw"): string {
       `  select tool     click to select, drag empty space to marquee-select multiple objects\n` +
       `  click objects   select and move them\n` +
       `  drag handles    resize boxes / adjust line endpoints\n` +
+      `  line tool       automatically chooses clean line glyphs, using Braille for sub-cell shallow/steep angles\n` +
       `  selected text   shows a virtual selection box\n` +
       `  Delete          remove selected object\n` +
       `  Esc             deselect\n` +
       `  Ctrl+Q          quit\n` +
       `  Ctrl+Z / Ctrl+Y undo / redo\n` +
       `  Ctrl+X          clear canvas\n` +
-      `  [ / ]           cycle box style or the current brush in Brush/Line mode\n` +
-      `  mouse wheel     cycle box style or the current brush in Brush/Line mode\n` +
-      `  Space           stamp the current brush in Brush/Line mode / insert space in Text mode\n` +
+      `  [ / ]           cycle box style in Box mode or brush in Brush mode\n` +
+      `  mouse wheel     cycle box style in Box mode or brush in Brush mode\n` +
+      `  Space           stamp a line point or current brush / insert space in Text mode\n` +
       `  Enter / Ctrl+S  save\n\n` +
       `Options:\n` +
       `  -o, --output <file>  write the result to a file\n` +

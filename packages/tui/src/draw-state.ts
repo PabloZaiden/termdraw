@@ -58,7 +58,6 @@ type LineObject = BaseDrawObject & {
   y1: number;
   x2: number;
   y2: number;
-  brush: string;
 };
 
 type PaintObject = BaseDrawObject & {
@@ -426,6 +425,117 @@ function getBoxBorderGlyphs(style: ConnectionStyle) {
   }
 }
 
+const BRAILLE_DOT_MASKS = [
+  [0x1, 0x8],
+  [0x2, 0x10],
+  [0x4, 0x20],
+  [0x40, 0x80],
+] as const;
+const BRAILLE_X_OFFSETS = [0.25, 0.75] as const;
+const BRAILLE_Y_OFFSETS = [0.125, 0.375, 0.625, 0.875] as const;
+const BRAILLE_LINE_THRESHOLD = 0.22;
+
+function getLineCharacter(start: Point, end: Point): string {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+
+  if (dx === 0 && dy === 0) return "•";
+  if (dx === 0) return "│";
+  if (dy === 0) return "─";
+  return Math.sign(dx) === Math.sign(dy) ? "╲" : "╱";
+}
+
+function shouldRenderLineAsBraille(start: Point, end: Point): boolean {
+  const dx = Math.abs(end.x - start.x);
+  const dy = Math.abs(end.y - start.y);
+  return dx !== 0 && dy !== 0 && dx !== dy;
+}
+
+function getDistanceToSegmentSquared(
+  point: { x: number; y: number },
+  start: Point,
+  end: Point,
+): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+
+  if (lengthSquared === 0) {
+    const offsetX = point.x - start.x;
+    const offsetY = point.y - start.y;
+    return offsetX * offsetX + offsetY * offsetY;
+  }
+
+  const t = clamp(((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared, 0, 1);
+  const projectedX = start.x + dx * t;
+  const projectedY = start.y + dy * t;
+  const offsetX = point.x - projectedX;
+  const offsetY = point.y - projectedY;
+  return offsetX * offsetX + offsetY * offsetY;
+}
+
+function getLineRenderCharacters(start: Point, end: Point): Map<string, string> {
+  const rendered = new Map<string, string>();
+
+  if (!shouldRenderLineAsBraille(start, end)) {
+    const char = getLineCharacter(start, end);
+    for (const point of getLinePoints(start.x, start.y, end.x, end.y)) {
+      rendered.set(`${point.x},${point.y}`, char);
+    }
+    return rendered;
+  }
+
+  const segmentStart = { x: start.x + 0.5, y: start.y + 0.5 };
+  const segmentEnd = { x: end.x + 0.5, y: end.y + 0.5 };
+  const thresholdSquared = BRAILLE_LINE_THRESHOLD * BRAILLE_LINE_THRESHOLD;
+  const rect = normalizeRect(start, end);
+
+  for (let y = rect.top; y <= rect.bottom; y += 1) {
+    for (let x = rect.left; x <= rect.right; x += 1) {
+      let mask = 0;
+
+      for (let row = 0; row < BRAILLE_Y_OFFSETS.length; row += 1) {
+        for (let col = 0; col < BRAILLE_X_OFFSETS.length; col += 1) {
+          const point = {
+            x: x + BRAILLE_X_OFFSETS[col]!,
+            y: y + BRAILLE_Y_OFFSETS[row]!,
+          };
+          if (getDistanceToSegmentSquared(point, segmentStart, segmentEnd) > thresholdSquared) {
+            continue;
+          }
+          mask |= BRAILLE_DOT_MASKS[row]![col]!;
+        }
+      }
+
+      if (mask !== 0) {
+        rendered.set(`${x},${y}`, String.fromCodePoint(0x2800 + mask));
+      }
+    }
+  }
+
+  if (rendered.size > 0) {
+    return rendered;
+  }
+
+  const fallbackChar = getLineCharacter(start, end);
+  for (const point of getLinePoints(start.x, start.y, end.x, end.y)) {
+    rendered.set(`${point.x},${point.y}`, fallbackChar);
+  }
+  return rendered;
+}
+
+function pointFromKey(key: string): Point {
+  const [xText = "0", yText = "0"] = key.split(",");
+  return {
+    x: Number(xText),
+    y: Number(yText),
+  };
+}
+
+function getLineRenderCells(start: Point, end: Point): Point[] {
+  return [...getLineRenderCharacters(start, end).keys()].map((key) => pointFromKey(key));
+}
+
 function getLinePoints(x0: number, y0: number, x1: number, y1: number): Point[] {
   const points: Point[] = [];
 
@@ -613,7 +723,7 @@ function getObjectRenderCells(object: DrawObject): Point[] {
       return [...cells.values()];
     }
     case "line":
-      return getLinePoints(object.x1, object.y1, object.x2, object.y2);
+      return getLineRenderCells({ x: object.x1, y: object.y1 }, { x: object.x2, y: object.y2 });
     case "paint":
       return object.points.map((point) => ({ ...point }));
     case "text":
@@ -665,9 +775,10 @@ function objectContainsPoint(object: DrawObject, x: number, y: number): boolean 
       return x === object.left || x === object.right || y === object.top || y === object.bottom;
     }
     case "line":
-      return getLinePoints(object.x1, object.y1, object.x2, object.y2).some(
-        (point) => point.x === x && point.y === y,
-      );
+      return getLineRenderCells(
+        { x: object.x1, y: object.y1 },
+        { x: object.x2, y: object.y2 },
+      ).some((point) => point.x === x && point.y === y);
     case "paint":
       return object.points.some((point) => point.x === x && point.y === y);
     case "text":
@@ -717,7 +828,7 @@ export class DrawState {
   private undoStack: Snapshot[] = [];
   private redoStack: Snapshot[] = [];
   private status =
-    "Line mode: drag on empty space to create a line object, or drag an existing object to move it.";
+    "Line mode: drag on empty space to create a clean line object, or drag an existing object to move it.";
 
   private sceneDirty = true;
   private renderCanvas: CanvasGrid = [];
@@ -832,7 +943,7 @@ export class DrawState {
       const direction =
         event.scrollDirection === "down" || event.scrollDirection === "left" ? -1 : 1;
 
-      if (this.mode === "line" || this.mode === "paint") {
+      if (this.mode === "paint") {
         this.cycleBrush(direction);
       } else if (this.mode === "box") {
         this.cycleBoxStyle(direction);
@@ -1198,7 +1309,7 @@ export class DrawState {
       );
     } else if (next === "line") {
       this.setStatus(
-        "Line mode: drag on empty space to create a line. Click objects to move them, or line endpoints to adjust.",
+        "Line mode: drag on empty space to create a clean line. Click objects to move them, or line endpoints to adjust.",
       );
     } else if (next === "box") {
       this.setStatus(
@@ -1245,12 +1356,11 @@ export class DrawState {
       y1: this.cursorY,
       x2: this.cursorX,
       y2: this.cursorY,
-      brush: this.brush,
     };
     this.setObjects([...this.objects, object]);
     this.setSelectedObjects([object.id], object.id);
     this.activeTextObjectId = null;
-    this.setStatus(`Stamped "${this.brush}" at ${this.cursorX + 1},${this.cursorY + 1}.`);
+    this.setStatus(`Stamped "•" at ${this.cursorX + 1},${this.cursorY + 1}.`);
   }
 
   public eraseAtCursor(): void {
@@ -1596,7 +1706,6 @@ export class DrawState {
         y1: start.y,
         x2: end.x,
         y2: end.y,
-        brush: this.brush,
       };
       this.setObjects([...this.objects, object]);
       this.setSelectedObjects([object.id], object.id);
@@ -1884,8 +1993,13 @@ export class DrawState {
           break;
         }
         case "line": {
-          for (const point of getLinePoints(object.x1, object.y1, object.x2, object.y2)) {
-            this.paintRenderCell(point.x, point.y, object.brush, object.color);
+          const rendered = getLineRenderCharacters(
+            { x: object.x1, y: object.y1 },
+            { x: object.x2, y: object.y2 },
+          );
+          for (const [key, char] of rendered) {
+            const { x, y } = pointFromKey(key);
+            this.paintRenderCell(x, y, char, object.color);
           }
           break;
         }
@@ -1942,14 +2056,13 @@ export class DrawState {
     const preview = new Map<string, string>();
     if (!this.pendingLine) return preview;
 
-    for (const point of getLinePoints(
-      this.pendingLine.start.x,
-      this.pendingLine.start.y,
-      this.pendingLine.end.x,
-      this.pendingLine.end.y,
+    for (const [key, char] of getLineRenderCharacters(
+      this.pendingLine.start,
+      this.pendingLine.end,
     )) {
-      if (!this.isInsideCanvas(point.x, point.y)) continue;
-      preview.set(`${point.x},${point.y}`, this.brush);
+      const { x, y } = pointFromKey(key);
+      if (!this.isInsideCanvas(x, y)) continue;
+      preview.set(key, char);
     }
 
     return preview;
@@ -2628,8 +2741,7 @@ export class DrawState {
           a.x1 === (b as LineObject).x1 &&
           a.y1 === (b as LineObject).y1 &&
           a.x2 === (b as LineObject).x2 &&
-          a.y2 === (b as LineObject).y2 &&
-          a.brush === (b as LineObject).brush
+          a.y2 === (b as LineObject).y2
         );
       case "paint":
         return (
