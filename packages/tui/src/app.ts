@@ -384,6 +384,7 @@ export class TermDrawRenderable extends FrameBufferRenderable {
       x,
       y,
       scrollDirection: event.scroll?.direction,
+      shift: event.modifiers.shift,
     };
 
     this.state.handlePointerEvent(translated);
@@ -1158,6 +1159,7 @@ export function buildHelpText(binaryName = "termdraw"): string {
       `  click objects   select and move them\n` +
       `  drag handles    resize boxes / adjust line endpoints\n` +
       `  line tool       automatically chooses clean line glyphs, using Braille for sub-cell shallow/steep angles\n` +
+      `  Shift + drag    constrain line creation/editing to horizontal or vertical\n` +
       `  selected text   shows a virtual selection box\n` +
       `  Delete          remove selected object\n` +
       `  Esc             deselect\n` +

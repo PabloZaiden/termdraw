@@ -110,6 +110,9 @@ test("help text documents tool hotkeys and automatic line rendering", () => {
   expect(help).toContain(
     "automatically chooses clean line glyphs, using Braille for sub-cell shallow/steep angles",
   );
+  expect(help).toContain(
+    "Shift + drag    constrain line creation/editing to horizontal or vertical",
+  );
 });
 
 test("TermDrawApp supports custom footer text", async () => {

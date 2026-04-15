@@ -148,6 +148,7 @@ export type PointerEventLike = {
   x: number;
   y: number;
   scrollDirection?: "up" | "down" | "left" | "right";
+  shift?: boolean;
 };
 
 const DIRECTIONS: Direction[] = ["n", "e", "s", "w"];
@@ -449,6 +450,17 @@ function shouldRenderLineAsBraille(start: Point, end: Point): boolean {
   const dx = Math.abs(end.x - start.x);
   const dy = Math.abs(end.y - start.y);
   return dx !== 0 && dy !== 0 && dx !== dy;
+}
+
+function constrainLinePoint(anchor: Point, point: Point): Point {
+  const dx = point.x - anchor.x;
+  const dy = point.y - anchor.y;
+
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return { x: point.x, y: anchor.y };
+  }
+
+  return { x: anchor.x, y: point.y };
 }
 
 function getDistanceToSegmentSquared(
@@ -828,7 +840,7 @@ export class DrawState {
   private undoStack: Snapshot[] = [];
   private redoStack: Snapshot[] = [];
   private status =
-    "Line mode: drag on empty space to create a clean line object, or drag an existing object to move it.";
+    "Line mode: drag on empty space to create a clean line object, hold Shift to constrain horizontal/vertical, or drag an existing object to move it.";
 
   private sceneDirty = true;
   private renderCanvas: CanvasGrid = [];
@@ -959,6 +971,7 @@ export class DrawState {
     const point = { x: clampedX, y: clampedY };
 
     if (event.type === "up" || event.type === "drag-end") {
+      this.syncPointerInteraction(point, event.shift === true);
       this.finishPointerInteraction(point, insideCanvas);
       return;
     }
@@ -968,7 +981,7 @@ export class DrawState {
       this.cursorY = clampedY;
 
       if (this.dragState) {
-        this.updateDraggedObject(point);
+        this.updateDraggedObject(point, event.shift === true);
         return;
       }
 
@@ -989,8 +1002,10 @@ export class DrawState {
       }
 
       if (this.pendingLine) {
-        this.pendingLine.end = point;
-        this.setStatus(`Sizing line to ${point.x + 1},${point.y + 1}.`);
+        const nextPoint =
+          event.shift === true ? constrainLinePoint(this.pendingLine.start, point) : point;
+        this.pendingLine.end = nextPoint;
+        this.setStatus(`Sizing line to ${nextPoint.x + 1},${nextPoint.y + 1}.`);
         return;
       }
 
@@ -1067,7 +1082,7 @@ export class DrawState {
           end: { x: canvasX, y: canvasY },
         };
         this.setStatus(
-          `Line start at ${canvasX + 1},${canvasY + 1}. Drag to endpoint, release to commit.`,
+          `Line start at ${canvasX + 1},${canvasY + 1}. Drag to endpoint, hold Shift to constrain, release to commit.`,
         );
         return;
       case "paint":
@@ -1309,7 +1324,7 @@ export class DrawState {
       );
     } else if (next === "line") {
       this.setStatus(
-        "Line mode: drag on empty space to create a clean line. Click objects to move them, or line endpoints to adjust.",
+        "Line mode: drag on empty space to create a clean line. Hold Shift to constrain horizontal/vertical. Click objects to move them, or line endpoints to adjust.",
       );
     } else if (next === "box") {
       this.setStatus(
@@ -1631,6 +1646,39 @@ export class DrawState {
     };
   }
 
+  private syncPointerInteraction(point: Point, constrainLineAxis = false): void {
+    if (this.dragState) {
+      this.updateDraggedObject(point, constrainLineAxis);
+      return;
+    }
+
+    if (this.pendingSelection) {
+      this.pendingSelection.end = point;
+      return;
+    }
+
+    if (this.pendingBox) {
+      this.pendingBox.end = point;
+      return;
+    }
+
+    if (this.pendingLine) {
+      this.pendingLine.end = constrainLineAxis
+        ? constrainLinePoint(this.pendingLine.start, point)
+        : point;
+      return;
+    }
+
+    if (this.pendingPaint) {
+      this.pendingPaint.points = appendPaintSegment(
+        this.pendingPaint.points,
+        this.pendingPaint.lastPoint,
+        point,
+      );
+      this.pendingPaint.lastPoint = point;
+    }
+  }
+
   private finishPointerInteraction(point: Point, insideCanvas: boolean): void {
     if (this.pendingSelection) {
       const rect = normalizeRect(this.pendingSelection.start, this.pendingSelection.end);
@@ -1783,7 +1831,7 @@ export class DrawState {
     }
   }
 
-  private updateDraggedObject(point: Point): void {
+  private updateDraggedObject(point: Point, constrainLineAxis = false): void {
     const dragState = this.dragState;
     if (!dragState) return;
 
@@ -1812,6 +1860,7 @@ export class DrawState {
           dragState.originalObject,
           dragState.endpoint,
           point,
+          constrainLineAxis,
         );
         nextObjects = [nextObject];
         break;
@@ -2561,21 +2610,24 @@ export class DrawState {
     line: LineObject,
     endpoint: LineEndpointHandle,
     point: Point,
+    constrainLineAxis = false,
   ): LineObject {
     const clampedPoint = this.clampPointInsideCanvas(point);
+    const anchor = endpoint === "start" ? { x: line.x2, y: line.y2 } : { x: line.x1, y: line.y1 };
+    const nextPoint = constrainLineAxis ? constrainLinePoint(anchor, clampedPoint) : clampedPoint;
 
     if (endpoint === "start") {
       return {
         ...line,
-        x1: clampedPoint.x,
-        y1: clampedPoint.y,
+        x1: nextPoint.x,
+        y1: nextPoint.y,
       };
     }
 
     return {
       ...line,
-      x2: clampedPoint.x,
-      y2: clampedPoint.y,
+      x2: nextPoint.x,
+      y2: nextPoint.y,
     };
   }
 
