@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { MouseButton } from "@opentui/core";
-import { DrawState } from "./draw-state";
+import { DrawState, TEXT_BORDER_MODES } from "./draw-state";
 
 function canvasPoint(state: DrawState, x: number, y: number) {
   return {
@@ -710,6 +710,45 @@ describe("DrawState", () => {
     expect(state.getCompositeCell(2, 1)).toBe("H");
     expect(state.getCompositeCell(3, 1)).toBe("i");
     expect(state.getCompositeCell(4, 1)).toBe("!");
+  });
+
+  test("text tool supports selectable border modes", () => {
+    const state = new DrawState(30, 12);
+    state.setMode("text");
+
+    expect(TEXT_BORDER_MODES).toEqual(["none", "single", "double", "underline"]);
+
+    state.setTextBorderMode("single");
+    state.handlePointerEvent({
+      type: "down",
+      button: MouseButton.LEFT,
+      ...canvasPoint(state, 1, 1),
+    });
+    state.insertCharacter("H");
+    state.insertCharacter("i");
+    expect(state.exportArt()).toBe(" ┌──┐\n │Hi│\n └──┘");
+
+    state.clearCanvas();
+    state.setTextBorderMode("double");
+    state.handlePointerEvent({
+      type: "down",
+      button: MouseButton.LEFT,
+      ...canvasPoint(state, 1, 1),
+    });
+    state.insertCharacter("H");
+    state.insertCharacter("i");
+    expect(state.exportArt()).toBe(" ╔══╗\n ║Hi║\n ╚══╝");
+
+    state.clearCanvas();
+    state.setTextBorderMode("underline");
+    state.handlePointerEvent({
+      type: "down",
+      button: MouseButton.LEFT,
+      ...canvasPoint(state, 1, 1),
+    });
+    state.insertCharacter("H");
+    state.insertCharacter("i");
+    expect(state.exportArt()).toBe("  Hi\n  ──");
   });
 
   test("select mode can marquee-select and move multiple objects", () => {

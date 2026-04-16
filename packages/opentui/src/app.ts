@@ -21,13 +21,14 @@ import {
   type InkColor,
   type LineStyle,
   type PointerEventLike,
+  type TextBorderMode,
 } from "./draw-state.js";
 
 const MIN_WIDTH = 45;
 const MIN_HEIGHT = 27;
-const TOOL_PALETTE_WIDTH = 17;
+const TOOL_PALETTE_WIDTH = 20;
 const TOOL_BUTTON_WIDTH = 13;
-const STYLE_BUTTON_WIDTH = 10;
+const STYLE_BUTTON_WIDTH = 16;
 const TOOL_BUTTON_HEIGHT = 3;
 const COLOR_SWATCH_WIDTH = 3;
 const COLOR_SWATCH_COLUMNS = 4;
@@ -126,6 +127,13 @@ const BRUSH_OPTIONS = [
   { brush: "▒", sample: "▒▒▒", label: "Medium" },
   { brush: "▓", sample: "▓▓▓", label: "Heavy" },
 ] as const;
+
+const TEXT_BORDER_OPTIONS: { style: TextBorderMode; sample: string; label: string }[] = [
+  { style: "none", sample: "abc", label: "No border" },
+  { style: "single", sample: "┌─┐", label: "Single" },
+  { style: "double", sample: "╔═╗", label: "Double" },
+  { style: "underline", sample: "___", label: "Underline" },
+];
 
 const INK_COLOR_VALUES: Record<InkColor, RGBA> = {
   white: RGBA.fromHex("#e2e8f0"),
@@ -377,6 +385,9 @@ export class TermDrawRenderable extends FrameBufferRenderable {
           } else if (this.state.currentMode === "paint") {
             this.state.setMode("paint");
             this.state.setBrush(styleButton.style);
+          } else if (this.state.currentMode === "text") {
+            this.state.setMode("text");
+            this.state.setTextBorderMode(styleButton.style as TextBorderMode);
           }
           this.requestRender();
         }
@@ -643,6 +654,20 @@ export class TermDrawRenderable extends FrameBufferRenderable {
     }
 
     if (this.state.currentMode === "text") {
+      if (key.raw === "[") {
+        key.preventDefault();
+        this.state.cycleTextBorderMode(-1);
+        this.requestRender();
+        return true;
+      }
+
+      if (key.raw === "]") {
+        key.preventDefault();
+        this.state.cycleTextBorderMode(1);
+        this.requestRender();
+        return true;
+      }
+
       if (name === "backspace") {
         key.preventDefault();
         this.state.backspace();
@@ -717,6 +742,7 @@ export class TermDrawRenderable extends FrameBufferRenderable {
     if (this.state.currentMode === "box") return BOX_STYLE_OPTIONS.length;
     if (this.state.currentMode === "line") return LINE_STYLE_OPTIONS.length;
     if (this.state.currentMode === "paint") return BRUSH_OPTIONS.length;
+    if (this.state.currentMode === "text") return TEXT_BORDER_OPTIONS.length;
     return 0;
   }
 
@@ -731,7 +757,7 @@ export class TermDrawRenderable extends FrameBufferRenderable {
     ];
 
     const buttons: ToolButton[] = [];
-    let top = layout.bodyTop;
+    let top = layout.bodyTop + 3;
 
     for (const definition of definitions) {
       buttons.push({
@@ -755,7 +781,8 @@ export class TermDrawRenderable extends FrameBufferRenderable {
     if (
       this.state.currentMode !== "box" &&
       this.state.currentMode !== "line" &&
-      this.state.currentMode !== "paint"
+      this.state.currentMode !== "paint" &&
+      this.state.currentMode !== "text"
     )
       return [];
 
@@ -770,11 +797,13 @@ export class TermDrawRenderable extends FrameBufferRenderable {
         ? BOX_STYLE_OPTIONS
         : this.state.currentMode === "line"
           ? LINE_STYLE_OPTIONS
-          : BRUSH_OPTIONS.map((option) => ({
-              style: option.brush,
-              sample: option.sample,
-              label: option.label,
-            }));
+          : this.state.currentMode === "text"
+            ? TEXT_BORDER_OPTIONS
+            : BRUSH_OPTIONS.map((option) => ({
+                style: option.brush,
+                sample: option.sample,
+                label: option.label,
+              }));
     return options.map((option, index) => ({
       style: option.style,
       left: buttonLeft,
@@ -787,9 +816,7 @@ export class TermDrawRenderable extends FrameBufferRenderable {
 
   private getColorSwatches(layout: AppLayout): ColorSwatch[] {
     const buttonLeft = this.getPaletteButtonLeft(layout);
-    const toolButtons = this.getToolButtons(layout);
-    const lastButton = toolButtons[toolButtons.length - 1];
-    const colorTop = (lastButton?.top ?? layout.bodyTop) + TOOL_BUTTON_HEIGHT + 1;
+    const colorTop = layout.bodyTop;
 
     return INK_COLORS.map((color, index) => ({
       color,
@@ -933,6 +960,19 @@ export class TermDrawRenderable extends FrameBufferRenderable {
         COLORS.accent,
         COLORS.panel,
       );
+    } else if (this.state.currentMode === "text") {
+      const textBorder =
+        TEXT_BORDER_OPTIONS.find((option) => option.style === this.state.currentTextBorderMode) ??
+        TEXT_BORDER_OPTIONS[0]!;
+      x = drawSegment(this.frameBuffer, x, y, "  border:", COLORS.dim, COLORS.panel);
+      x = drawSegment(
+        this.frameBuffer,
+        x,
+        y,
+        `${textBorder.sample} ${textBorder.label}`,
+        COLORS.success,
+        COLORS.panel,
+      );
     }
 
     x = drawSegment(this.frameBuffer, x, y, "  color:", COLORS.dim, COLORS.panel);
@@ -1045,7 +1085,9 @@ export class TermDrawRenderable extends FrameBufferRenderable {
         ? this.state.currentBoxStyle === button.style
         : this.state.currentMode === "line"
           ? this.state.currentLineStyle === button.style
-          : this.state.currentBrush === button.style;
+          : this.state.currentMode === "text"
+            ? this.state.currentTextBorderMode === button.style
+            : this.state.currentBrush === button.style;
     const fg = isActive ? COLORS.panel : COLORS.text;
     const bg = isActive ? COLORS.warning : COLORS.panel;
     const text = padToWidth(`${button.sample} ${button.label}`, button.width);
@@ -1060,13 +1102,6 @@ export class TermDrawRenderable extends FrameBufferRenderable {
   }
 
   private drawColorPicker(layout: AppLayout): void {
-    const buttonLeft = this.getPaletteButtonLeft(layout);
-    const toolButtons = this.getToolButtons(layout);
-    const lastButton = toolButtons[toolButtons.length - 1];
-    const colorLabelTop = (lastButton?.top ?? layout.bodyTop) + TOOL_BUTTON_HEIGHT;
-
-    this.frameBuffer.drawText("Color", buttonLeft, colorLabelTop, COLORS.dim, COLORS.panel);
-
     for (const swatch of this.getColorSwatches(layout)) {
       this.drawColorSwatch(swatch);
     }
@@ -1236,6 +1271,7 @@ export function buildHelpText(binaryName = "termdraw"): string {
       `  click objects   select and move them\n` +
       `  drag handles    resize boxes / adjust line endpoints\n` +
       `  line tool       choose Smooth (Braille-aware), Single, or Double line stencils\n` +
+      `  text tool       choose No border, Single, Double, or Dashed textbox borders\n` +
       `  Shift + drag    constrain line creation/editing to horizontal or vertical\n` +
       `  selected text   shows a virtual selection box\n` +
       `  Delete          remove selected object\n` +
@@ -1243,7 +1279,7 @@ export function buildHelpText(binaryName = "termdraw"): string {
       `  Ctrl+Q          quit\n` +
       `  Ctrl+Z / Ctrl+Y undo / redo\n` +
       `  Ctrl+X          clear canvas\n` +
-      `  [ / ]           cycle box style in Box mode, line style in Line mode, or brush in Brush mode\n` +
+      `  [ / ]           cycle box style in Box mode, line style in Line mode, text border in Text mode, or brush in Brush mode\n` +
       `  mouse wheel     cycle box style in Box mode, line style in Line mode, or brush in Brush mode\n` +
       `  brush tool      choose from preset brush stencils in the palette\n` +
       `  Space           stamp a line point or current brush / insert space in Text mode\n` +

@@ -9,6 +9,21 @@ import {
   type TermDrawRenderableOptions,
 } from "./app.js";
 import {
+  BRUSHES,
+  BOX_STYLES,
+  DrawState,
+  INK_COLORS,
+  LINE_STYLES,
+  TEXT_BORDER_MODES,
+  type BoxStyle,
+  type DrawMode,
+  type DrawObject,
+  type InkColor,
+  type LineStyle,
+  type PointerEventLike,
+  type TextBorderMode,
+} from "./draw-state.js";
+import {
   TERM_DRAW_APP_COMPONENT_NAME,
   TERM_DRAW_COMPONENT_NAME,
   TERM_DRAW_EDITOR_COMPONENT_NAME,
@@ -23,6 +38,12 @@ import {
 } from "./react.js";
 
 export {
+  BRUSHES,
+  BOX_STYLES,
+  DrawState,
+  INK_COLORS,
+  LINE_STYLES,
+  TEXT_BORDER_MODES,
   TERM_DRAW_APP_COMPONENT_NAME,
   TERM_DRAW_COMPONENT_NAME,
   TERM_DRAW_EDITOR_COMPONENT_NAME,
@@ -36,6 +57,13 @@ export {
   formatSavedOutput,
   registerTermDrawComponent,
   registerTermDrawComponents,
+  type BoxStyle,
+  type DrawMode,
+  type DrawObject,
+  type InkColor,
+  type LineStyle,
+  type PointerEventLike,
+  type TextBorderMode,
   type TermDrawAppProps,
   type TermDrawAppRenderableOptions,
   type TermDrawEditorProps,

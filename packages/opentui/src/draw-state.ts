@@ -69,11 +69,15 @@ type PaintObject = BaseDrawObject & {
   brush: string;
 };
 
+export const TEXT_BORDER_MODES = ["none", "single", "double", "underline"] as const;
+export type TextBorderMode = (typeof TEXT_BORDER_MODES)[number];
+
 type TextObject = BaseDrawObject & {
   type: "text";
   x: number;
   y: number;
   content: string;
+  border: TextBorderMode;
 };
 
 export type DrawObject = BoxObject | LineObject | PaintObject | TextObject;
@@ -87,6 +91,8 @@ type Snapshot = {
   cursorY: number;
   nextObjectNumber: number;
   nextZIndex: number;
+  textBorderMode: TextBorderMode;
+  textBorderModeIndex: number;
 };
 
 type PendingSelection = { start: Point; end: Point };
@@ -714,14 +720,41 @@ function getBoundsUnion(objects: DrawObject[]): Rect | null {
   return { left, top, right, bottom };
 }
 
-function getTextSelectionBounds(object: TextObject): Rect {
-  const width = Math.max(1, visibleCellCount(object.content));
+function getTextRenderRect(object: TextObject): Rect {
+  const contentWidth = Math.max(1, visibleCellCount(object.content));
+  if (object.border === "none") {
+    return {
+      left: object.x,
+      top: object.y,
+      right: object.x + contentWidth - 1,
+      bottom: object.y,
+    };
+  }
+
   return {
-    left: object.x - 1,
-    top: object.y - 1,
-    right: object.x + width,
-    bottom: object.y + 1,
+    left: object.x,
+    top: object.y,
+    right: object.x + contentWidth + 1,
+    bottom: object.y + 2,
   };
+}
+
+function getTextContentOrigin(object: TextObject): Point {
+  return object.border === "none"
+    ? { x: object.x, y: object.y }
+    : { x: object.x + 1, y: object.y + 1 };
+}
+
+function getTextSelectionBounds(object: TextObject): Rect {
+  const rect = getTextRenderRect(object);
+  return object.border === "none"
+    ? {
+        left: rect.left - 1,
+        top: rect.top - 1,
+        right: rect.right + 1,
+        bottom: rect.bottom + 1,
+      }
+    : rect;
 }
 
 function getObjectSelectionBounds(object: DrawObject): Rect {
@@ -771,11 +804,16 @@ function getObjectRenderCells(object: DrawObject): Point[] {
       );
     case "paint":
       return object.points.map((point) => ({ ...point }));
-    case "text":
-      return splitGraphemes(object.content).map((_, index) => ({
-        x: object.x + index,
-        y: object.y,
-      }));
+    case "text": {
+      const rect = getTextRenderRect(object);
+      const cells: Point[] = [];
+      for (let y = rect.top; y <= rect.bottom; y += 1) {
+        for (let x = rect.left; x <= rect.right; x += 1) {
+          cells.push({ x, y });
+        }
+      }
+      return cells;
+    }
   }
 }
 
@@ -855,6 +893,8 @@ export class DrawState {
   private boxStyleIndex = 0;
   private lineStyle = LINE_STYLES[0] as LineStyle;
   private lineStyleIndex = 0;
+  private textBorderMode = TEXT_BORDER_MODES[0] as TextBorderMode;
+  private textBorderModeIndex = 0;
   private inkColor = INK_COLORS[0] as InkColor;
   private inkColorIndex = 0;
 
@@ -903,6 +943,10 @@ export class DrawState {
 
   public get currentLineStyle(): LineStyle {
     return this.lineStyle;
+  }
+
+  public get currentTextBorderMode(): TextBorderMode {
+    return this.textBorderMode;
   }
 
   public get currentInkColor(): InkColor {
@@ -1361,6 +1405,20 @@ export class DrawState {
     this.setStatus(`Line style set to ${this.describeLineStyle(this.lineStyle)}.`);
   }
 
+  public setTextBorderMode(mode: TextBorderMode): void {
+    this.textBorderMode = mode;
+    const idx = TEXT_BORDER_MODES.indexOf(mode);
+    this.textBorderModeIndex = idx >= 0 ? idx : 0;
+    this.setStatus(`Text border set to ${this.describeTextBorderMode(mode)}.`);
+  }
+
+  public cycleTextBorderMode(direction: 1 | -1): void {
+    this.textBorderModeIndex =
+      (this.textBorderModeIndex + direction + TEXT_BORDER_MODES.length) % TEXT_BORDER_MODES.length;
+    this.textBorderMode = TEXT_BORDER_MODES[this.textBorderModeIndex] ?? this.textBorderMode;
+    this.setStatus(`Text border set to ${this.describeTextBorderMode(this.textBorderMode)}.`);
+  }
+
   public cycleMode(): void {
     const order: DrawMode[] = ["select", "box", "line", "paint", "text"];
     const currentIndex = order.indexOf(this.mode);
@@ -1399,7 +1457,7 @@ export class DrawState {
       );
     } else {
       this.setStatus(
-        "Text mode: click empty space to type, click text to edit, and use its virtual selection box to move it.",
+        `Text mode (${this.describeTextBorderMode(this.textBorderMode)}): click empty space to type, click text to edit, and use its virtual selection box to move it.`,
       );
     }
   }
@@ -1481,6 +1539,7 @@ export class DrawState {
       x: this.cursorX,
       y: this.cursorY,
       content: char,
+      border: this.textBorderMode,
     };
     this.setObjects([...this.objects, object]);
     this.setSelectedObjects([object.id], object.id);
@@ -2052,6 +2111,8 @@ export class DrawState {
       cursorY: this.cursorY,
       nextObjectNumber: this.nextObjectNumber,
       nextZIndex: this.nextZIndex,
+      textBorderMode: this.textBorderMode,
+      textBorderModeIndex: this.textBorderModeIndex,
     };
   }
 
@@ -2075,6 +2136,8 @@ export class DrawState {
     this.cursorY = Math.max(0, Math.min(snapshot.cursorY, this.canvasHeight - 1));
     this.nextObjectNumber = snapshot.nextObjectNumber;
     this.nextZIndex = snapshot.nextZIndex;
+    this.textBorderMode = snapshot.textBorderMode;
+    this.textBorderModeIndex = snapshot.textBorderModeIndex;
     this.textEntryArmed = this.activeTextObjectId !== null;
     this.pendingSelection = null;
     this.pendingLine = null;
@@ -2142,8 +2205,40 @@ export class DrawState {
           break;
         }
         case "text": {
+          const contentOrigin = getTextContentOrigin(object);
+          if (object.border !== "none") {
+            const contentWidth = Math.max(1, visibleCellCount(object.content));
+            const left = object.x;
+            const top = object.y;
+            const right = object.x + contentWidth + 1;
+            const bottom = object.y + 2;
+            if (object.border === "underline") {
+              for (let x = contentOrigin.x; x < contentOrigin.x + contentWidth; x += 1) {
+                this.paintRenderCell(x, bottom, "─", object.color);
+              }
+            } else {
+              const horizontal = object.border === "double" ? "═" : "─";
+              const vertical = object.border === "double" ? "║" : "│";
+              const topLeft = object.border === "double" ? "╔" : "┌";
+              const topRight = object.border === "double" ? "╗" : "┐";
+              const bottomLeft = object.border === "double" ? "╚" : "└";
+              const bottomRight = object.border === "double" ? "╝" : "┘";
+
+              this.paintRenderCell(left, top, topLeft, object.color);
+              this.paintRenderCell(right, top, topRight, object.color);
+              this.paintRenderCell(left, bottom, bottomLeft, object.color);
+              this.paintRenderCell(right, bottom, bottomRight, object.color);
+              for (let x = left + 1; x < right; x += 1) {
+                this.paintRenderCell(x, top, horizontal, object.color);
+                this.paintRenderCell(x, bottom, horizontal, object.color);
+              }
+              this.paintRenderCell(left, top + 1, vertical, object.color);
+              this.paintRenderCell(right, top + 1, vertical, object.color);
+            }
+          }
+
           for (const [index, segment] of splitGraphemes(object.content).entries()) {
-            this.paintRenderCell(object.x + index, object.y, segment, object.color);
+            this.paintRenderCell(contentOrigin.x + index, contentOrigin.y, segment, object.color);
           }
           break;
         }
@@ -2481,7 +2576,11 @@ export class DrawState {
 
     for (const { object } of indexedObjects) {
       if (object.type === "text") {
-        const onTextContent = objectContainsPoint(object, x, y);
+        const contentOrigin = getTextContentOrigin(object);
+        const onTextContent =
+          y === contentOrigin.y &&
+          x >= contentOrigin.x &&
+          x < contentOrigin.x + visibleCellCount(object.content);
         const inSelectedTextBounds =
           object.id === this.selectedObjectId &&
           rectContainsPoint(getTextSelectionBounds(object), x, y);
@@ -2679,14 +2778,18 @@ export class DrawState {
   private clampTextIntoRect(text: TextObject, rect: Rect): TextObject {
     if (!isValidRect(rect)) return text;
 
-    const width = visibleCellCount(text.content);
+    const renderRect = getTextRenderRect(text);
+    const width = renderRect.right - renderRect.left + 1;
+    const height = renderRect.bottom - renderRect.top + 1;
     const minX = rect.left;
     const maxX = rect.right - width + 1;
+    const minY = rect.top;
+    const maxY = rect.bottom - height + 1;
 
     return {
       ...text,
       x: maxX >= minX ? clamp(text.x, minX, maxX) : rect.left,
-      y: clamp(text.y, rect.top, rect.bottom),
+      y: maxY >= minY ? clamp(text.y, minY, maxY) : rect.top,
     };
   }
 
@@ -2833,6 +2936,19 @@ export class DrawState {
     }
   }
 
+  private describeTextBorderMode(mode: TextBorderMode): string {
+    switch (mode) {
+      case "none":
+        return "No border";
+      case "single":
+        return "Single";
+      case "double":
+        return "Double";
+      case "underline":
+        return "Underline";
+    }
+  }
+
   private describeInkColor(color: InkColor): string {
     switch (color) {
       case "white":
@@ -2899,7 +3015,8 @@ export class DrawState {
         return (
           a.x === (b as TextObject).x &&
           a.y === (b as TextObject).y &&
-          a.content === (b as TextObject).content
+          a.content === (b as TextObject).content &&
+          a.border === (b as TextObject).border
         );
     }
   }
