@@ -4,9 +4,15 @@
     "noEmit": false,
     "declaration": true,
     "declarationMap": true,
+    "disableSourceOfProjectReferenceRedirect": true,
     "outDir": "./dist",
     "rootDir": "./src",
+    "baseUrl": ".",
+    "paths": {
+      "@termdraw/opentui": ["../opentui/dist/index.d.ts"]
+    },
     "allowImportingTsExtensions": false
   },
+  "references": [{ "path": "../opentui/tsconfig.build.json" }],
   "include": ["src/index.ts", "src/main.tsx"]
 }
