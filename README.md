@@ -48,6 +48,18 @@ termdraw --help
 
 termDRAW! outputs terminal text, not SVG or bitmap graphics.
 
+## Use it in Pi
+
+```bash
+pi install npm:@termdraw/pi
+```
+
+Then inside Pi:
+
+```text
+/termdraw
+```
+
 ## Embed in an OpenTUI app
 
 ```bash
@@ -91,18 +103,6 @@ Also exported from `@termdraw/opentui`:
 - `TermDrawRenderable`
 - `formatSavedOutput`
 - `buildHelpText`
-
-## Use it in Pi
-
-```bash
-pi install npm:@termdraw/pi
-```
-
-Then inside Pi:
-
-```text
-/termdraw
-```
 
 ## Docs
 
