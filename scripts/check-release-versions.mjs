@@ -1,5 +1,13 @@
 import { readFileSync } from "node:fs";
 
+// Release policy for this repo:
+// - all publishable packages move together on the same version
+// - internal package dependency pins must match that shared release version
+//
+// This script is a lightweight guardrail for local release prep and CI. It fails
+// when package versions drift or when internal dependency pins still point at an
+// older release.
+
 const files = [
   "packages/opentui/package.json",
   "packages/app/package.json",
