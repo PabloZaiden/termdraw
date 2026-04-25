@@ -33,6 +33,19 @@ import { COLORS, MIN_HEIGHT, MIN_WIDTH, getCanvasInsets } from "./app/theme.js";
 import type { AppLayout, ChromeMode } from "./app/types.js";
 import { splitGraphemes } from "./text.js";
 
+function normalizeDiagramPath(path: string): string {
+  const trimmedPath = path.trim();
+  const lastSeparatorIndex = Math.max(trimmedPath.lastIndexOf("/"), trimmedPath.lastIndexOf("\\"));
+  const fileName = trimmedPath.slice(lastSeparatorIndex + 1);
+  const extensionIndex = fileName.lastIndexOf(".");
+
+  if (extensionIndex <= 0) {
+    return `${trimmedPath}.td.json`;
+  }
+
+  return trimmedPath;
+}
+
 /** Configures the shared termDRAW frame-buffer renderable. */
 export interface TermDrawRenderableOptions extends RenderableOptions<FrameBufferRenderable> {
   width?: number | "auto" | `${number}%`;
@@ -110,6 +123,7 @@ export class TermDrawRenderable extends FrameBufferRenderable {
     this.onCancel = onCancel;
     this.pendingInitialDocument = initialDocument ?? null;
     this.diagramPath = diagramPath?.trim() ? diagramPath : null;
+    this.startupLogoDismissed = initialDocument !== undefined;
     this.showStartupLogo = showStartupLogo;
     this.autoFocus = autoFocus;
     this.cancelOnCtrlC = cancelOnCtrlC;
@@ -392,17 +406,18 @@ export class TermDrawRenderable extends FrameBufferRenderable {
   private async saveDiagramToPath(path: string): Promise<void> {
     if (!this.onSaveDiagramCallback || this.diagramSavePending) return;
 
+    const normalizedPath = normalizeDiagramPath(path);
     this.diagramSavePending = true;
     this.diagramSavePromptError = null;
-    this.state.setStatusMessage(`Saving diagram to ${path}...`);
+    this.state.setStatusMessage(`Saving diagram to ${normalizedPath}...`);
     this.requestRender();
 
     try {
-      await this.onSaveDiagramCallback(this.state.exportDocument(), path);
-      this.diagramPath = path;
+      await this.onSaveDiagramCallback(this.state.exportDocument(), normalizedPath);
+      this.diagramPath = normalizedPath;
       this.diagramSavePromptValue = null;
       this.diagramSavePromptError = null;
-      this.state.setStatusMessage(`Saved diagram to ${path}.`);
+      this.state.setStatusMessage(`Saved diagram to ${normalizedPath}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.diagramSavePromptError = message;

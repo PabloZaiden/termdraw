@@ -1,3 +1,5 @@
+import { openSync } from "node:fs";
+import { ReadStream } from "node:tty";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import {
@@ -13,6 +15,16 @@ export interface CliOptions {
   outputPath?: string;
   fenced: boolean;
   help: boolean;
+}
+
+type StdinLike = NodeJS.ReadableStream & {
+  isTTY?: boolean;
+  pause(): void;
+  setEncoding(encoding: BufferEncoding): void;
+};
+
+function openInteractiveStdin(): NodeJS.ReadStream {
+  return new ReadStream(openSync("/dev/tty", "r"));
 }
 
 export function parseArgs(argv: string[]): CliOptions {
@@ -69,15 +81,26 @@ function withTrailingNewline(text: string): string {
   return text.endsWith("\n") ? text : `${text}\n`;
 }
 
-export async function readTextFromStdin(): Promise<string> {
+export async function readTextFromStdin(stdin: StdinLike = process.stdin): Promise<string> {
   let text = "";
-  process.stdin.setEncoding("utf8");
+  stdin.setEncoding("utf8");
 
-  for await (const chunk of process.stdin) {
-    text += chunk;
+  try {
+    for await (const chunk of stdin) {
+      text += chunk;
+    }
+  } finally {
+    stdin.pause();
   }
 
   return text;
+}
+
+export function shouldUseInteractiveTtyInput(
+  diagramPath: string | undefined,
+  stdin: Pick<StdinLike, "isTTY"> = process.stdin,
+): boolean {
+  return diagramPath === "-" && !stdin.isTTY;
 }
 
 export async function loadDiagramInput(
@@ -119,14 +142,24 @@ export async function runTermDrawAppCli(argv = Bun.argv.slice(2)): Promise<void>
     : undefined;
   const initialDiagramPath =
     options.diagramPath && options.diagramPath !== "-" ? options.diagramPath : undefined;
+  const interactiveStdin = shouldUseInteractiveTtyInput(options.diagramPath)
+    ? openInteractiveStdin()
+    : null;
 
-  const renderer = await createCliRenderer({
-    exitOnCtrlC: false,
-    useMouse: true,
-    enableMouseMovement: true,
-    autoFocus: true,
-    screenMode: "alternate-screen",
-  });
+  let renderer;
+  try {
+    renderer = await createCliRenderer({
+      stdin: interactiveStdin ?? process.stdin,
+      exitOnCtrlC: false,
+      useMouse: true,
+      enableMouseMovement: true,
+      autoFocus: true,
+      screenMode: "alternate-screen",
+    });
+  } catch (error) {
+    interactiveStdin?.destroy();
+    throw error;
+  }
 
   const root = createRoot(renderer);
   let finished = false;
@@ -136,6 +169,7 @@ export async function runTermDrawAppCli(argv = Bun.argv.slice(2)): Promise<void>
     finished = true;
 
     renderer.destroy();
+    interactiveStdin?.destroy();
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     if (art === null) {

@@ -1,9 +1,15 @@
+import { PassThrough } from "node:stream";
 import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DRAW_DOCUMENT_VERSION } from "../../opentui/src/index";
-import { loadDiagramInput, parseArgs } from "./main";
+import {
+  loadDiagramInput,
+  parseArgs,
+  readTextFromStdin,
+  shouldUseInteractiveTtyInput,
+} from "./main";
 
 const tempDirs: string[] = [];
 
@@ -54,6 +60,33 @@ test("loadDiagramInput reads stdin when --diagram - is used", async () => {
     version: DRAW_DOCUMENT_VERSION,
     objects: [],
   });
+});
+
+test("readTextFromStdin drains and pauses stdin", async () => {
+  const stdin = new PassThrough();
+  let paused = false;
+
+  Reflect.set(stdin, "isTTY", false);
+  Reflect.set(stdin, "pause", () => {
+    paused = true;
+    return stdin;
+  });
+
+  stdin.end(
+    JSON.stringify({
+      version: DRAW_DOCUMENT_VERSION,
+      objects: [],
+    }),
+  );
+
+  await expect(readTextFromStdin(stdin)).resolves.toContain('"version"');
+  expect(paused).toBe(true);
+});
+
+test("shouldUseInteractiveTtyInput only swaps stdin for piped diagram input", () => {
+  expect(shouldUseInteractiveTtyInput("-", { isTTY: false })).toBe(true);
+  expect(shouldUseInteractiveTtyInput("-", { isTTY: true })).toBe(false);
+  expect(shouldUseInteractiveTtyInput("diagram.td.json", { isTTY: false })).toBe(false);
 });
 
 test("loadDiagramInput surfaces clear parse errors", async () => {

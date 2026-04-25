@@ -209,7 +209,6 @@ test("TermDrawApp renders a provided initial document", async () => {
       width="100%"
       height="100%"
       autoFocus
-      showStartupLogo={false}
       initialDocument={{
         version: DRAW_DOCUMENT_VERSION,
         objects: [
@@ -238,7 +237,9 @@ test("TermDrawApp renders a provided initial document", async () => {
 
   await renderOnce();
 
-  expect(captureCharFrame()).toContain("────");
+  const frame = captureCharFrame();
+  expect(frame).toContain("────");
+  expect(frame).not.toContain("Licensed under MIT");
 });
 
 test("TermDrawApp saves the current diagram to the loaded path", async () => {
@@ -321,10 +322,47 @@ test("TermDrawApp prompts for a diagram path and reuses it on later saves", asyn
   mockInput.pressEnter();
   await renderOnce();
 
-  expect(savedPaths).toEqual(["diagram"]);
+  expect(savedPaths).toEqual(["diagram.td.json"]);
 
   mockInput.pressKey("d", { ctrl: true });
   await renderOnce();
 
-  expect(savedPaths).toEqual(["diagram", "diagram"]);
+  expect(savedPaths).toEqual(["diagram.td.json", "diagram.td.json"]);
+});
+
+test("TermDrawApp appends .td.json when saving a loaded diagram without an extension", async () => {
+  let savedPath: string | null = null;
+
+  const { mockInput, renderOnce } = await testRender(
+    <TermDrawApp
+      width="100%"
+      height="100%"
+      autoFocus
+      showStartupLogo={false}
+      diagramPath="loaded-diagram"
+      initialDocument={{
+        version: DRAW_DOCUMENT_VERSION,
+        objects: [],
+      }}
+      onSaveDiagram={(_document, path) => {
+        savedPath = path;
+      }}
+    />,
+    {
+      width: 64,
+      height: 29,
+      useMouse: true,
+      enableMouseMovement: true,
+    },
+  );
+
+  await renderOnce();
+
+  mockInput.pressKey("d", { ctrl: true });
+  await renderOnce();
+
+  if (savedPath === null) {
+    throw new Error("Expected diagram save to capture a path.");
+  }
+  expect(savedPath === "loaded-diagram.td.json").toBe(true);
 });
