@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { MouseButton } from "@opentui/core";
-import { DrawState, TEXT_BORDER_MODES } from "./draw-state";
+import {
+  DRAW_DOCUMENT_VERSION,
+  DrawState,
+  parseDrawDocument,
+  TEXT_BORDER_MODES,
+} from "./draw-state";
 
 /** Converts canvas-local coordinates into the pointer coordinates expected by `DrawState`. */
 function canvasPoint(state: DrawState, x: number, y: number) {
@@ -827,5 +832,64 @@ describe("DrawState", () => {
 
     state.redo();
     expect(state.getCompositeCell(4, 2)).toBe("┏");
+  });
+
+  test("exports and reloads a native document without losing object metadata", () => {
+    const document = {
+      version: DRAW_DOCUMENT_VERSION,
+      objects: [
+        {
+          id: "obj-3",
+          type: "box" as const,
+          z: 1,
+          parentId: null,
+          color: "cyan" as const,
+          left: 1,
+          top: 1,
+          right: 6,
+          bottom: 4,
+          style: "double" as const,
+        },
+        {
+          id: "obj-7",
+          type: "text" as const,
+          z: 2,
+          parentId: null,
+          color: "yellow" as const,
+          x: 2,
+          y: 2,
+          content: "Hi",
+          border: "none" as const,
+        },
+      ],
+    };
+
+    const state = new DrawState(20, 10);
+    state.loadDocument(document);
+
+    expect(state.exportDocument()).toEqual({
+      ...document,
+      objects: [
+        document.objects[0]!,
+        {
+          ...document.objects[1]!,
+          parentId: "obj-3",
+        },
+      ],
+    });
+    expect(state.exportArt()).toBe(" ╔════╗\n ║Hi  ║\n ║    ║\n ╚════╝");
+    expect(state.currentStatus).toContain("Loaded diagram with 2 objects");
+  });
+
+  test("parseDrawDocument rejects invalid document shapes with clear errors", () => {
+    expect(() =>
+      parseDrawDocument(
+        JSON.stringify({ version: DRAW_DOCUMENT_VERSION, objects: [{ id: "obj-1" }] }),
+      ),
+    ).toThrow("objects[0].z must be an integer.");
+
+    expect(() => parseDrawDocument(JSON.stringify({ version: 999, objects: [] }))).toThrow(
+      `termDRAW document version must be ${DRAW_DOCUMENT_VERSION}`,
+    );
   });
 });

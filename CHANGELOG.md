@@ -6,7 +6,11 @@ All notable user-visible changes to this project are documented in this file.
 
 ### Added
 
+- Added native `.td.json` diagram documents that can be opened with `termdraw --diagram <file>` or `termdraw --diagram -`.
+
 ### Changed
+
+- Split rendered-art export from native diagram saving in the app: Enter/Ctrl+S still exports art, while Ctrl+D saves the editable diagram and prompts for a path when needed.
 
 ### Fixed
 

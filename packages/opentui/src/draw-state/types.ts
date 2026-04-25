@@ -18,6 +18,7 @@ export const INK_COLORS = [
   "magenta",
 ] as const;
 export const TEXT_BORDER_MODES = ["none", "single", "double", "underline"] as const;
+export const DRAW_DOCUMENT_VERSION = 1 as const;
 
 export type DrawMode = "select" | "box" | "line" | "paint" | "text";
 export type BoxStyle = (typeof BOX_STYLES)[number];
@@ -83,6 +84,10 @@ export type TextObject = BaseDrawObject & {
 };
 
 export type DrawObject = BoxObject | LineObject | PaintObject | TextObject;
+export type DrawDocument = {
+  version: typeof DRAW_DOCUMENT_VERSION;
+  objects: DrawObject[];
+};
 
 export type Snapshot = {
   objects: DrawObject[];

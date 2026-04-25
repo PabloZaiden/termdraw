@@ -153,11 +153,20 @@ export function handleKeyPress(
     state: DrawState;
     cancelOnCtrlCEnabled: boolean;
     onSave: (() => void) | null;
+    onSaveDiagram: (() => void) | null;
     onCancel: (() => void) | null;
   } & InputCallbacks,
 ): boolean {
-  const { key, state, cancelOnCtrlCEnabled, onSave, onCancel, requestRender, dismissStartupLogo } =
-    options;
+  const {
+    key,
+    state,
+    cancelOnCtrlCEnabled,
+    onSave,
+    onSaveDiagram,
+    onCancel,
+    requestRender,
+    dismissStartupLogo,
+  } = options;
   const name = key.name.toLowerCase();
 
   dismissStartupLogo();
@@ -178,6 +187,13 @@ export function handleKeyPress(
   if (name === "enter" || name === "return" || (key.ctrl && name === "s")) {
     key.preventDefault();
     onSave?.();
+    return true;
+  }
+
+  if (key.ctrl && name === "d") {
+    if (!onSaveDiagram) return false;
+    key.preventDefault();
+    onSaveDiagram();
     return true;
   }
 
