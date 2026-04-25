@@ -6,7 +6,7 @@
  */
 import { TextAttributes, type OptimizedBuffer } from "@opentui/core";
 import type { DrawState } from "../draw-state.js";
-import { padToWidth, visibleCellCount } from "../text.js";
+import { padToWidth, truncateToCells, visibleCellCount } from "../text.js";
 import type { AppLayout, ColorSwatch, StyleButton, ToolButton } from "./types.js";
 import {
   BOX_STYLE_OPTIONS,
@@ -70,6 +70,7 @@ export function drawChrome(
   state: DrawState,
   layout: AppLayout,
   footerTextOverride: string | null,
+  canSaveDiagram: boolean,
 ): void {
   drawHorizontalBorder(frameBuffer, width, 0, "╭", "╮");
   drawHorizontalBorder(frameBuffer, width, height - 1, "╰", "╯");
@@ -84,7 +85,14 @@ export function drawChrome(
 
   drawHeaderRow(frameBuffer, width, state, layout);
   drawHeaderDivider(frameBuffer, width, layout);
-  drawFooterRow(frameBuffer, width, state.currentStatus, layout, footerTextOverride);
+  drawFooterRow(
+    frameBuffer,
+    width,
+    state.currentStatus,
+    layout,
+    footerTextOverride,
+    canSaveDiagram,
+  );
 }
 
 /** Draws the header row describing the active tool, style, and color. */
@@ -210,10 +218,13 @@ function drawFooterRow(
   status: string,
   layout: AppLayout,
   footerTextOverride: string | null,
+  canSaveDiagram: boolean,
 ): void {
   const text =
     footerTextOverride ??
-    "B Brush • A Select • U Box • P Line • T Text • Esc Deselect • Enter/Ctrl+S Save • Ctrl+Q Quit";
+    `B Brush • A Select • U Box • P Line • T Text • Esc Deselect • Enter/Ctrl+S Export Art${
+      canSaveDiagram ? " • Ctrl+D Save Diagram" : ""
+    } • Ctrl+Q Quit`;
   const combined = `${text}  ${status}`;
   const padded = padToWidth(combined, Math.max(1, width - 2));
   frameBuffer.drawText(padded, 1, layout.footerY, COLORS.dim, COLORS.panel);
@@ -401,6 +412,72 @@ export function drawCanvas(frameBuffer: OptimizedBuffer, state: DrawState): void
   }
 }
 
+/** Draws the minimal save-as prompt used for native diagram persistence. */
+export function drawDiagramSavePrompt(
+  frameBuffer: OptimizedBuffer,
+  width: number,
+  height: number,
+  value: string | null,
+  error: string | null,
+  pending: boolean,
+): void {
+  if (value === null) return;
+
+  const label = "Save diagram as";
+  const pathLine = pending ? "Saving..." : value;
+  const displayPath = pathLine.length > 0 ? pathLine : " ";
+  const errorLine = error ?? "Enter confirms • Esc cancels";
+  const contentWidth = Math.max(
+    24,
+    Math.min(
+      width - 6,
+      Math.max(
+        visibleCellCount(label),
+        visibleCellCount(displayPath),
+        visibleCellCount(errorLine),
+      ) + 2,
+    ),
+  );
+  const boxWidth = Math.max(10, contentWidth + 2);
+  const boxHeight = 5;
+  const left = Math.max(0, Math.floor((width - boxWidth) / 2));
+  const top = Math.max(0, Math.floor((height - boxHeight) / 2));
+  const pathText = padToWidth(displayPath, contentWidth);
+  const helperText = truncateToCells(padToWidth(errorLine, contentWidth), contentWidth);
+
+  drawHorizontalBorder(frameBuffer, boxWidth, top, "╭", "╮", left);
+  for (let y = 1; y < boxHeight - 1; y += 1) {
+    frameBuffer.setCell(left, top + y, "│", COLORS.border, COLORS.panel);
+    frameBuffer.drawText(" ".repeat(boxWidth - 2), left + 1, top + y, COLORS.text, COLORS.panel);
+    frameBuffer.setCell(left + boxWidth - 1, top + y, "│", COLORS.border, COLORS.panel);
+  }
+  drawHorizontalBorder(frameBuffer, boxWidth, top + boxHeight - 1, "╰", "╯", left);
+
+  frameBuffer.drawText(
+    padToWidth(label, contentWidth),
+    left + 1,
+    top + 1,
+    COLORS.text,
+    COLORS.panel,
+    TextAttributes.BOLD,
+  );
+  frameBuffer.drawText(
+    pathText,
+    left + 1,
+    top + 2,
+    COLORS.accent,
+    COLORS.panel,
+    TextAttributes.BOLD,
+  );
+  frameBuffer.drawText(
+    helperText,
+    left + 1,
+    top + 3,
+    error ? COLORS.warning : COLORS.dim,
+    COLORS.panel,
+  );
+}
+
 /** Draws the outer vertical borders for a single frame row. */
 function drawOuterSideBorders(frameBuffer: OptimizedBuffer, width: number, y: number): void {
   frameBuffer.setCell(0, y, "│", COLORS.border, COLORS.panel);
@@ -414,10 +491,11 @@ function drawHorizontalBorder(
   y: number,
   left: string,
   right: string,
+  startX = 0,
 ): void {
-  frameBuffer.setCell(0, y, left, COLORS.border, COLORS.panel);
+  frameBuffer.setCell(startX, y, left, COLORS.border, COLORS.panel);
   for (let x = 1; x < width - 1; x += 1) {
-    frameBuffer.setCell(x, y, "─", COLORS.border, COLORS.panel);
+    frameBuffer.setCell(startX + x, y, "─", COLORS.border, COLORS.panel);
   }
-  frameBuffer.setCell(width - 1, y, right, COLORS.border, COLORS.panel);
+  frameBuffer.setCell(startX + width - 1, y, right, COLORS.border, COLORS.panel);
 }

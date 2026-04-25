@@ -1,8 +1,15 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { buildHelpText, formatSavedOutput, TermDrawApp } from "../../opentui/src/index.js";
+import {
+  buildHelpText,
+  formatSavedOutput,
+  parseDrawDocument,
+  TermDrawApp,
+  type DrawDocument,
+} from "../../opentui/src/index.js";
 
 export interface CliOptions {
+  diagramPath?: string;
   outputPath?: string;
   fenced: boolean;
   help: boolean;
@@ -42,6 +49,16 @@ export function parseArgs(argv: string[]): CliOptions {
       continue;
     }
 
+    if (arg === "--diagram") {
+      const diagramPath = argv[i + 1];
+      if (!diagramPath) {
+        throw new Error(`Missing value for ${arg}`);
+      }
+      options.diagramPath = diagramPath;
+      i += 1;
+      continue;
+    }
+
     throw new Error(`Unknown argument: ${arg}`);
   }
 
@@ -52,6 +69,43 @@ function withTrailingNewline(text: string): string {
   return text.endsWith("\n") ? text : `${text}\n`;
 }
 
+export async function readTextFromStdin(): Promise<string> {
+  let text = "";
+  process.stdin.setEncoding("utf8");
+
+  for await (const chunk of process.stdin) {
+    text += chunk;
+  }
+
+  return text;
+}
+
+export async function loadDiagramInput(
+  path: string,
+  readFromStdin: () => Promise<string> = readTextFromStdin,
+): Promise<DrawDocument> {
+  const sourceLabel = path === "-" ? "stdin" : path;
+
+  let content: string;
+  try {
+    content = path === "-" ? await readFromStdin() : await Bun.file(path).text();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to read diagram from ${sourceLabel}: ${message}`);
+  }
+
+  try {
+    return parseDrawDocument(content);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to load diagram from ${sourceLabel}: ${message}`);
+  }
+}
+
+function formatDiagramDocument(document: DrawDocument): string {
+  return `${JSON.stringify(document, null, 2)}\n`;
+}
+
 export async function runTermDrawAppCli(argv = Bun.argv.slice(2)): Promise<void> {
   const options = parseArgs(argv);
 
@@ -59,6 +113,12 @@ export async function runTermDrawAppCli(argv = Bun.argv.slice(2)): Promise<void>
     process.stdout.write(buildHelpText("termdraw"));
     return;
   }
+
+  const initialDocument = options.diagramPath
+    ? await loadDiagramInput(options.diagramPath)
+    : undefined;
+  const initialDiagramPath =
+    options.diagramPath && options.diagramPath !== "-" ? options.diagramPath : undefined;
 
   const renderer = await createCliRenderer({
     exitOnCtrlC: false,
@@ -101,8 +161,13 @@ export async function runTermDrawAppCli(argv = Bun.argv.slice(2)): Promise<void>
       height="100%"
       autoFocus
       cancelOnCtrlC
+      initialDocument={initialDocument}
+      diagramPath={initialDiagramPath}
       onSave={(art: string) => {
         void finish(art);
+      }}
+      onSaveDiagram={async (document, path) => {
+        await Bun.write(path, formatDiagramDocument(document));
       }}
       onCancel={() => {
         void finish(null);

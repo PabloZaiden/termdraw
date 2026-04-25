@@ -46,11 +46,22 @@ npm install --global @termdraw/app
 termdraw
 ```
 
-Draw something, then press `Enter` or `Ctrl+S` to write the result to stdout.
+Draw something, then press `Enter` or `Ctrl+S` to export the rendered art to stdout.
+
+Press `Ctrl+D` to save the editable diagram as a native `.td.json` document. If you opened a diagram with `--diagram`, termDRAW reuses that path by default; otherwise it prompts for one inside the app.
 
 ## App usage
 
 ```bash
+# open an editable native document from a file
+termdraw --diagram architecture.td.json
+
+# open an editable native document from stdin
+cat architecture.td.json | termdraw --diagram -
+
+# save the rendered art directly to a file
+termdraw --diagram architecture.td.json --output diagram.txt
+
 # save plain text directly to a file
 termdraw --output diagram.txt
 
@@ -62,6 +73,8 @@ termdraw --help
 ```
 
 termDRAW! outputs terminal text, not SVG or bitmap graphics.
+
+Use native `.td.json` documents when you want to reopen and keep editing a drawing. Plain-text output remains an export format and does not preserve the original object metadata.
 
 ## Use it in Pi
 
@@ -98,8 +111,13 @@ createRoot(renderer).render(
     width="100%"
     height="100%"
     autoFocus
+    initialDocument={existingDocument}
+    diagramPath="architecture.td.json"
     onSave={(art) => {
       console.log(art);
+    }}
+    onSaveDiagram={async (document, path) => {
+      await Bun.write(path, `${JSON.stringify(document, null, 2)}\n`);
     }}
     onCancel={() => {
       renderer.destroy();
@@ -118,6 +136,7 @@ Also exported from `@termdraw/opentui`:
 - `TermDrawRenderable`
 - `formatSavedOutput`
 - `buildHelpText`
+- `parseDrawDocument`
 
 ## Docs
 

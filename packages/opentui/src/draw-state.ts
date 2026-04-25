@@ -59,6 +59,7 @@ import {
 import {
   BRUSHES,
   BOX_STYLES,
+  DRAW_DOCUMENT_VERSION,
   DEFAULT_CANVAS_INSETS,
   INK_COLORS,
   LINE_STYLES,
@@ -72,6 +73,7 @@ import {
   type ConnectionGrid,
   type ConnectionStyle,
   type DragState,
+  type DrawDocument,
   type DrawMode,
   type DrawObject,
   type EraseState,
@@ -97,6 +99,7 @@ import {
 export {
   BRUSHES,
   BOX_STYLES,
+  DRAW_DOCUMENT_VERSION,
   INK_COLORS,
   LINE_STYLES,
   TEXT_BORDER_MODES,
@@ -107,6 +110,7 @@ export {
 export type {
   BoxStyle,
   CanvasInsets,
+  DrawDocument,
   DrawMode,
   DrawObject,
   InkColor,
@@ -117,6 +121,185 @@ export type {
 
 const MAX_HISTORY = 100;
 const HANDLE_CHARACTER = "●";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readInteger(value: unknown, label: string): number {
+  if (!Number.isInteger(value)) {
+    throw new Error(`${label} must be an integer.`);
+  }
+  return value as number;
+}
+
+function readNonEmptyString(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${label} must be a non-empty string.`);
+  }
+  return value;
+}
+
+function readString(value: unknown, label: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`${label} must be a string.`);
+  }
+  return value;
+}
+
+function readNullableString(value: unknown, label: string): string | null {
+  if (value === null) return null;
+  if (typeof value !== "string") {
+    throw new Error(`${label} must be a string or null.`);
+  }
+  return value;
+}
+
+function readEnumValue<T extends string>(value: unknown, label: string, options: readonly T[]): T {
+  if (typeof value !== "string" || !options.includes(value as T)) {
+    throw new Error(`${label} must be one of: ${options.join(", ")}.`);
+  }
+  return value as T;
+}
+
+function readPoint(value: unknown, label: string): Point {
+  if (!isRecord(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+
+  return {
+    x: readInteger(value.x, `${label}.x`),
+    y: readInteger(value.y, `${label}.y`),
+  };
+}
+
+function parseDocumentObject(value: unknown, index: number): DrawObject {
+  const label = `objects[${index}]`;
+  if (!isRecord(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+
+  const id = readNonEmptyString(value.id, `${label}.id`);
+  const z = readInteger(value.z, `${label}.z`);
+  const parentId = readNullableString(value.parentId, `${label}.parentId`);
+  const color = readEnumValue(value.color, `${label}.color`, INK_COLORS);
+  const type = readString(value.type, `${label}.type`);
+
+  switch (type) {
+    case "box": {
+      const box = {
+        id,
+        type,
+        z,
+        parentId,
+        color,
+        left: readInteger(value.left, `${label}.left`),
+        top: readInteger(value.top, `${label}.top`),
+        right: readInteger(value.right, `${label}.right`),
+        bottom: readInteger(value.bottom, `${label}.bottom`),
+        style: readEnumValue(value.style, `${label}.style`, BOX_STYLES),
+      } satisfies BoxObject;
+
+      if (!isValidRect(box)) {
+        throw new Error(`${label} must have valid box bounds.`);
+      }
+
+      return box;
+    }
+    case "line":
+      return {
+        id,
+        type,
+        z,
+        parentId,
+        color,
+        x1: readInteger(value.x1, `${label}.x1`),
+        y1: readInteger(value.y1, `${label}.y1`),
+        x2: readInteger(value.x2, `${label}.x2`),
+        y2: readInteger(value.y2, `${label}.y2`),
+        style: readEnumValue(value.style, `${label}.style`, LINE_STYLES),
+      } satisfies LineObject;
+    case "paint": {
+      const pointsValue = value.points;
+      if (!Array.isArray(pointsValue) || pointsValue.length === 0) {
+        throw new Error(`${label}.points must be a non-empty array.`);
+      }
+
+      const brush = readString(value.brush, `${label}.brush`);
+      if (visibleCellCount(brush) !== 1) {
+        throw new Error(`${label}.brush must be exactly one visible cell.`);
+      }
+
+      return {
+        id,
+        type,
+        z,
+        parentId,
+        color,
+        points: pointsValue.map((point, pointIndex) =>
+          readPoint(point, `${label}.points[${pointIndex}]`),
+        ),
+        brush,
+      } satisfies PaintObject;
+    }
+    case "text":
+      return {
+        id,
+        type,
+        z,
+        parentId,
+        color,
+        x: readInteger(value.x, `${label}.x`),
+        y: readInteger(value.y, `${label}.y`),
+        content: readString(value.content, `${label}.content`),
+        border: readEnumValue(value.border, `${label}.border`, TEXT_BORDER_MODES),
+      } satisfies TextObject;
+    default:
+      throw new Error(`${label}.type must be one of: box, line, paint, text.`);
+  }
+}
+
+export function validateDrawDocument(value: unknown): DrawDocument {
+  if (!isRecord(value)) {
+    throw new Error("termDRAW document must be a JSON object.");
+  }
+
+  if (value.version !== DRAW_DOCUMENT_VERSION) {
+    throw new Error(
+      `termDRAW document version must be ${DRAW_DOCUMENT_VERSION}; received ${String(value.version)}.`,
+    );
+  }
+
+  if (!Array.isArray(value.objects)) {
+    throw new Error("termDRAW document objects must be an array.");
+  }
+
+  const objects = value.objects.map((object, index) => parseDocumentObject(object, index));
+  const ids = new Set<string>();
+  for (const object of objects) {
+    if (ids.has(object.id)) {
+      throw new Error(`termDRAW document contains duplicate object id "${object.id}".`);
+    }
+    ids.add(object.id);
+  }
+
+  return {
+    version: DRAW_DOCUMENT_VERSION,
+    objects,
+  };
+}
+
+export function parseDrawDocument(input: string): DrawDocument {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(input);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid JSON.";
+    throw new Error(`Failed to parse termDRAW document JSON: ${message}`);
+  }
+
+  return validateDrawDocument(parsed);
+}
 
 /**
  * Coordinates the editable termDRAW scene, tool state, selection state, and rendering caches.
@@ -960,6 +1143,62 @@ export class DrawState {
     }
 
     return lines.join("\n");
+  }
+
+  /** Exports the editable scene as a versioned termDRAW document. */
+  public exportDocument(): DrawDocument {
+    return {
+      version: DRAW_DOCUMENT_VERSION,
+      objects: cloneObjects(this.objects),
+    };
+  }
+
+  /** Replaces the current editable scene from a validated termDRAW document. */
+  public loadDocument(document: DrawDocument): void {
+    const validatedDocument = validateDrawDocument(document);
+    const nextObjects = cloneObjects(validatedDocument.objects).map((object) =>
+      this.shiftObjectInsideCanvas(object),
+    );
+
+    this.objects = this.recomputeParentAssignments(nextObjects);
+    this.selectedObjectIds = [];
+    this.selectedObjectId = null;
+    this.activeTextObjectId = null;
+    this.textEntryArmed = false;
+    this.pendingSelection = null;
+    this.pendingLine = null;
+    this.pendingBox = null;
+    this.pendingPaint = null;
+    this.dragState = null;
+    this.eraseState = null;
+    this.undoStack = [];
+    this.redoStack = [];
+    this.cursorX = 0;
+    this.cursorY = 0;
+    this.mode = "line";
+    this.brush = BRUSHES[0];
+    this.brushIndex = 0;
+    this.boxStyle = BOX_STYLES[0];
+    this.boxStyleIndex = 0;
+    this.lineStyle = LINE_STYLES[0];
+    this.lineStyleIndex = 0;
+    this.textBorderMode = TEXT_BORDER_MODES[0];
+    this.textBorderModeIndex = 0;
+    this.inkColor = INK_COLORS[0];
+    this.inkColorIndex = 0;
+    this.nextObjectNumber = this.getNextDocumentObjectNumber(this.objects);
+    this.nextZIndex = this.getNextDocumentZIndex(this.objects);
+    this.markSceneDirty();
+    this.setStatus(
+      this.objects.length === 0
+        ? "Loaded empty diagram."
+        : `Loaded diagram with ${this.objects.length} object${this.objects.length === 1 ? "" : "s"}.`,
+    );
+  }
+
+  /** Replaces the footer status text with an explicit application message. */
+  public setStatusMessage(message: string): void {
+    this.setStatus(message);
   }
 
   /** Attempts to start a resize, endpoint drag, or move interaction at the given cell. */
@@ -2229,6 +2468,29 @@ export class DrawState {
     const z = this.nextZIndex;
     this.nextZIndex += 1;
     return z;
+  }
+
+  /** Derives the next stable `obj-N` identifier after loading a document. */
+  private getNextDocumentObjectNumber(objects: DrawObject[]): number {
+    let maxNumber = 0;
+
+    for (const object of objects) {
+      const match = /^obj-(\d+)$/.exec(object.id);
+      if (!match) continue;
+
+      const parsed = Number.parseInt(match[1]!, 10);
+      if (Number.isInteger(parsed)) {
+        maxNumber = Math.max(maxNumber, parsed);
+      }
+    }
+
+    return Math.max(1, maxNumber + 1, objects.length + 1);
+  }
+
+  /** Derives the next z-index after loading a document. */
+  private getNextDocumentZIndex(objects: DrawObject[]): number {
+    const maxZ = objects.reduce((currentMax, object) => Math.max(currentMax, object.z), 0);
+    return Math.max(1, maxZ + 1);
   }
 
   /** Formats rectangle bounds for user-facing status text. */

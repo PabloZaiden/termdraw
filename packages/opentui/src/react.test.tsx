@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
 import { buildHelpText } from "./app";
+import { DRAW_DOCUMENT_VERSION } from "./draw-state";
 import { TermDraw, TermDrawApp, TermDrawEditor } from "./react";
 
 function expectEmptySave(savedArt: string | null): void {
@@ -121,6 +122,8 @@ test("help text documents tool hotkeys and automatic line rendering", () => {
   expect(help).toContain("B / A / U / P / T");
   expect(help).toContain("choose Smooth (Braille-aware), Single, or Double line stencils");
   expect(help).toContain("choose from preset brush stencils in the palette");
+  expect(help).toContain("--diagram <file>");
+  expect(help).toContain("Ctrl+D          save diagram (.td.json)");
   expect(help).toContain(
     "Shift + drag    constrain line creation/editing to horizontal or vertical",
   );
@@ -198,4 +201,130 @@ test("TermDraw remains an alias for the full app component", async () => {
   const frame = captureCharFrame();
   expect(frame).toContain("termDRAW!");
   expect(frame).toContain("Tools");
+});
+
+test("TermDrawApp renders a provided initial document", async () => {
+  const { captureCharFrame, renderOnce } = await testRender(
+    <TermDrawApp
+      width="100%"
+      height="100%"
+      autoFocus
+      showStartupLogo={false}
+      initialDocument={{
+        version: DRAW_DOCUMENT_VERSION,
+        objects: [
+          {
+            id: "obj-1",
+            type: "line",
+            z: 1,
+            parentId: null,
+            color: "white",
+            x1: 1,
+            y1: 1,
+            x2: 4,
+            y2: 1,
+            style: "light",
+          },
+        ],
+      }}
+    />,
+    {
+      width: 64,
+      height: 29,
+      useMouse: true,
+      enableMouseMovement: true,
+    },
+  );
+
+  await renderOnce();
+
+  expect(captureCharFrame()).toContain("────");
+});
+
+test("TermDrawApp saves the current diagram to the loaded path", async () => {
+  let savedPath: string | null = null;
+  let savedDocument: unknown = null;
+
+  const { mockInput, renderOnce } = await testRender(
+    <TermDrawApp
+      width="100%"
+      height="100%"
+      autoFocus
+      showStartupLogo={false}
+      diagramPath="loaded.td.json"
+      initialDocument={{
+        version: DRAW_DOCUMENT_VERSION,
+        objects: [],
+      }}
+      onSaveDiagram={(document, path) => {
+        savedDocument = document;
+        savedPath = path;
+      }}
+    />,
+    {
+      width: 64,
+      height: 29,
+      useMouse: true,
+      enableMouseMovement: true,
+    },
+  );
+
+  await renderOnce();
+
+  mockInput.pressKey("d", { ctrl: true });
+  await renderOnce();
+
+  if (savedPath === null) {
+    throw new Error("Expected diagram save to capture a path.");
+  }
+  expect(savedPath === "loaded.td.json").toBe(true);
+  expect(savedDocument).toEqual({
+    version: DRAW_DOCUMENT_VERSION,
+    objects: [],
+  });
+});
+
+test("TermDrawApp prompts for a diagram path and reuses it on later saves", async () => {
+  const savedPaths: string[] = [];
+
+  const { captureCharFrame, mockInput, renderOnce } = await testRender(
+    <TermDrawApp
+      width="100%"
+      height="100%"
+      autoFocus
+      showStartupLogo={false}
+      initialDocument={{
+        version: DRAW_DOCUMENT_VERSION,
+        objects: [],
+      }}
+      onSaveDiagram={(_document, path) => {
+        savedPaths.push(path);
+      }}
+    />,
+    {
+      width: 64,
+      height: 29,
+      useMouse: true,
+      enableMouseMovement: true,
+    },
+  );
+
+  await renderOnce();
+
+  mockInput.pressKey("d", { ctrl: true });
+  await renderOnce();
+  expect(captureCharFrame()).toContain("Save diagram as");
+
+  for (const char of "diagram") {
+    mockInput.pressKey(char);
+  }
+  mockInput.pressEnter();
+  await renderOnce();
+
+  expect(savedPaths).toEqual(["diagram"]);
+
+  mockInput.pressKey("d", { ctrl: true });
+  await renderOnce();
+
+  expect(savedPaths).toEqual(["diagram", "diagram"]);
 });
