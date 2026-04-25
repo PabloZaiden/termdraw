@@ -50,3 +50,37 @@ export type ColorSwatch = {
   top: number;
   width: number;
 };
+
+/** Represents the editable state of the diagram save prompt while it is visible. */
+export type DiagramSavePromptState = {
+  value: string;
+  error: string | null;
+  pending: boolean;
+};
+
+/** Captures the computed geometry and display strings for the save prompt overlay. */
+export type DiagramSavePromptLayout = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  contentWidth: number;
+  label: string;
+  pathText: string;
+  helperText: string;
+  hasError: boolean;
+};
+
+/** Describes the outcome of handling a key press while the save prompt is visible. */
+export type DiagramSavePromptKeyResult = {
+  handled: boolean;
+  prompt: DiagramSavePromptState | null;
+  statusMessage?: string;
+  submitPath?: string;
+};
+
+/** Tracks the save dialog prompt plus save-in-flight state owned by the renderable. */
+export type DiagramSaveState = {
+  pending: boolean;
+  prompt: DiagramSavePromptState | null;
+};

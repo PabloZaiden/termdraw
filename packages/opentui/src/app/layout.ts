@@ -5,7 +5,15 @@
  * rendering and mouse-input handling.
  */
 import type { DrawMode, InkColor } from "../draw-state.js";
-import type { AppLayout, ColorSwatch, StyleButton, ToolButton } from "./types.js";
+import { padToWidth, truncateToCells, visibleCellCount } from "../text.js";
+import type {
+  AppLayout,
+  ColorSwatch,
+  DiagramSavePromptLayout,
+  DiagramSavePromptState,
+  StyleButton,
+  ToolButton,
+} from "./types.js";
 import {
   BOX_STYLE_OPTIONS,
   BRUSH_OPTIONS,
@@ -147,6 +155,45 @@ export function getColorSwatches(layout: AppLayout, colors: readonly InkColor[])
     top: colorTop + Math.floor(index / COLOR_SWATCH_COLUMNS),
     width: COLOR_SWATCH_WIDTH,
   }));
+}
+
+/** Returns the computed overlay layout for the diagram save prompt. */
+export function getDiagramSavePromptLayout(
+  width: number,
+  height: number,
+  prompt: DiagramSavePromptState | null,
+): DiagramSavePromptLayout | null {
+  if (!prompt) return null;
+
+  const label = "Save diagram as";
+  const pathLine = prompt.pending ? "Saving..." : prompt.value;
+  const displayPath = pathLine.length > 0 ? pathLine : " ";
+  const helperLine = prompt.error ?? "Enter confirms • Esc cancels";
+  const contentWidth = Math.max(
+    24,
+    Math.min(
+      width - 6,
+      Math.max(
+        visibleCellCount(label),
+        visibleCellCount(displayPath),
+        visibleCellCount(helperLine),
+      ) + 2,
+    ),
+  );
+  const boxWidth = Math.max(10, contentWidth + 2);
+  const boxHeight = 5;
+
+  return {
+    left: Math.max(0, Math.floor((width - boxWidth) / 2)),
+    top: Math.max(0, Math.floor((height - boxHeight) / 2)),
+    width: boxWidth,
+    height: boxHeight,
+    contentWidth,
+    label,
+    pathText: padToWidth(displayPath, contentWidth),
+    helperText: truncateToCells(padToWidth(helperLine, contentWidth), contentWidth),
+    hasError: prompt.error !== null,
+  };
 }
 
 /** Returns whether the pointer event lands inside the drawable canvas region. */
