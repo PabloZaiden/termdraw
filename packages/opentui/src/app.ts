@@ -17,10 +17,11 @@ import { DrawState, INK_COLORS, truncateToCells, type DrawDocument } from "./dra
 import {
   getColorSwatches,
   getContextualStyleButtons,
+  getDiagramSavePromptLayout,
   getLayout,
   getToolButtons,
 } from "./app/layout.js";
-import { handleKeyPress, handleMouseEvent } from "./app/input.js";
+import { handleDiagramSavePromptKey, handleKeyPress, handleMouseEvent } from "./app/input.js";
 import {
   drawCanvas,
   drawChrome,
@@ -30,8 +31,12 @@ import {
 } from "./app/render.js";
 import { renderStartupLogo } from "./app/startup-logo.js";
 import { COLORS, MIN_HEIGHT, MIN_WIDTH, getCanvasInsets } from "./app/theme.js";
-import type { AppLayout, ChromeMode } from "./app/types.js";
-import { splitGraphemes } from "./text.js";
+import type {
+  AppLayout,
+  ChromeMode,
+  DiagramSavePromptKeyResult,
+  DiagramSaveState,
+} from "./app/types.js";
 
 function normalizeDiagramPath(path: string): string {
   const trimmedPath = path.trim();
@@ -79,9 +84,10 @@ export class TermDrawRenderable extends FrameBufferRenderable {
   private onCancelCallback: (() => void) | null = null;
   private pendingInitialDocument: DrawDocument | null = null;
   private diagramPath: string | null = null;
-  private diagramSavePromptValue: string | null = null;
-  private diagramSavePromptError: string | null = null;
-  private diagramSavePending = false;
+  private readonly diagramSaveState: DiagramSaveState = {
+    pending: false,
+    prompt: null,
+  };
   private autoFocusEnabled = false;
   private startupLogoEnabled = true;
   private startupLogoDismissed = false;
@@ -273,18 +279,16 @@ export class TermDrawRenderable extends FrameBufferRenderable {
     );
     drawDiagramSavePrompt(
       this.frameBuffer,
-      this.width,
-      this.height,
-      this.diagramSavePromptValue,
-      this.diagramSavePromptError,
-      this.diagramSavePending,
+      getDiagramSavePromptLayout(this.width, this.height, this.getDiagramSavePrompt()),
     );
     super.renderSelf(buffer);
   }
 
   /** Dispatches keyboard shortcuts, cursor movement, and text entry. */
   public override handleKeyPress(key: KeyEvent): boolean {
-    if (this.handleDiagramSavePromptKey(key)) {
+    const diagramSavePromptResult = handleDiagramSavePromptKey(key, this.getDiagramSavePrompt());
+    if (diagramSavePromptResult.handled) {
+      this.applyDiagramSavePromptKeyResult(diagramSavePromptResult);
       return true;
     }
 
@@ -305,6 +309,11 @@ export class TermDrawRenderable extends FrameBufferRenderable {
     if (!this.startupLogoEnabled || this.startupLogoDismissed) return;
     this.startupLogoDismissed = true;
     this.requestRender();
+  }
+
+  /** Returns the active save prompt state when the save dialog is visible. */
+  private getDiagramSavePrompt() {
+    return this.diagramSaveState.prompt;
   }
 
   /** Recomputes the canvas size and returns the full-chrome layout when applicable. */
@@ -333,97 +342,79 @@ export class TermDrawRenderable extends FrameBufferRenderable {
 
   /** Starts a diagram save, prompting for a path when no diagram path is known yet. */
   private beginDiagramSave(): void {
-    if (this.diagramSavePending) return;
+    if (this.diagramSaveState.pending) return;
 
     if (this.diagramPath) {
       void this.saveDiagramToPath(this.diagramPath);
       return;
     }
 
-    this.diagramSavePromptValue = "";
-    this.diagramSavePromptError = null;
+    this.diagramSaveState.prompt = {
+      value: "",
+      error: null,
+      pending: false,
+    };
     this.state.setStatusMessage("Enter a path and press Enter to save the diagram.");
     this.requestRender();
   }
 
-  /** Handles keyboard input while the diagram save prompt is visible. */
-  private handleDiagramSavePromptKey(key: KeyEvent): boolean {
-    if (this.diagramSavePromptValue === null) return false;
+  /** Applies the result of the extracted save-prompt key handler to the renderable state. */
+  private applyDiagramSavePromptKeyResult(result: DiagramSavePromptKeyResult): void {
+    if (!result.handled) return;
 
-    const name = key.name.toLowerCase();
-    if (name === "escape") {
-      key.preventDefault();
-      this.diagramSavePromptValue = null;
-      this.diagramSavePromptError = null;
-      this.state.setStatusMessage("Save diagram cancelled.");
-      this.requestRender();
-      return true;
+    this.diagramSaveState.prompt = result.prompt;
+
+    if (result.statusMessage) {
+      this.state.setStatusMessage(result.statusMessage);
     }
 
-    if (name === "enter" || name === "return") {
-      key.preventDefault();
-      const path = this.diagramSavePromptValue.trim();
-      if (!path) {
-        this.diagramSavePromptError = "Path is required.";
-        this.state.setStatusMessage("Diagram path is required.");
-        this.requestRender();
-        return true;
-      }
-
-      void this.saveDiagramToPath(path);
-      return true;
+    if (result.submitPath) {
+      void this.saveDiagramToPath(result.submitPath);
+      return;
     }
 
-    if (name === "backspace") {
-      key.preventDefault();
-      const graphemes = splitGraphemes(this.diagramSavePromptValue);
-      graphemes.pop();
-      this.diagramSavePromptValue = graphemes.join("");
-      this.diagramSavePromptError = null;
-      this.requestRender();
-      return true;
-    }
-
-    if (
-      !key.ctrl &&
-      !key.meta &&
-      !key.option &&
-      key.raw &&
-      !key.raw.startsWith("\u001b") &&
-      name !== "tab"
-    ) {
-      key.preventDefault();
-      this.diagramSavePromptValue += key.raw;
-      this.diagramSavePromptError = null;
-      this.requestRender();
-      return true;
-    }
-
-    return true;
+    this.requestRender();
   }
 
   /** Persists the editable document and updates the active diagram path on success. */
   private async saveDiagramToPath(path: string): Promise<void> {
-    if (!this.onSaveDiagramCallback || this.diagramSavePending) return;
+    if (!this.onSaveDiagramCallback || this.diagramSaveState.pending) return;
 
     const normalizedPath = normalizeDiagramPath(path);
-    this.diagramSavePending = true;
-    this.diagramSavePromptError = null;
+    this.diagramSaveState.pending = true;
+    if (this.diagramSaveState.prompt) {
+      this.diagramSaveState.prompt = {
+        ...this.diagramSaveState.prompt,
+        error: null,
+        pending: true,
+      };
+    }
     this.state.setStatusMessage(`Saving diagram to ${normalizedPath}...`);
     this.requestRender();
 
     try {
       await this.onSaveDiagramCallback(this.state.exportDocument(), normalizedPath);
       this.diagramPath = normalizedPath;
-      this.diagramSavePromptValue = null;
-      this.diagramSavePromptError = null;
+      this.diagramSaveState.prompt = null;
       this.state.setStatusMessage(`Saved diagram to ${normalizedPath}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.diagramSavePromptError = message;
+      if (this.diagramSaveState.prompt) {
+        this.diagramSaveState.prompt = {
+          ...this.diagramSaveState.prompt,
+          error: message,
+          pending: false,
+        };
+      }
       this.state.setStatusMessage(`Failed to save diagram: ${message}`);
     } finally {
-      this.diagramSavePending = false;
+      this.diagramSaveState.pending = false;
+      if (this.diagramSaveState.prompt) {
+        this.diagramSaveState.prompt = {
+          ...this.diagramSaveState.prompt,
+          pending: false,
+        };
+      }
       this.requestRender();
     }
   }

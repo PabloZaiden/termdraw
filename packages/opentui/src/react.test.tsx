@@ -330,6 +330,92 @@ test("TermDrawApp prompts for a diagram path and reuses it on later saves", asyn
   expect(savedPaths).toEqual(["diagram.td.json", "diagram.td.json"]);
 });
 
+test("TermDrawApp validates that a diagram path is provided", async () => {
+  let saveCount = 0;
+
+  const { captureCharFrame, mockInput, renderOnce } = await testRender(
+    <TermDrawApp
+      width="100%"
+      height="100%"
+      autoFocus
+      showStartupLogo={false}
+      initialDocument={{
+        version: DRAW_DOCUMENT_VERSION,
+        objects: [],
+      }}
+      onSaveDiagram={() => {
+        saveCount += 1;
+      }}
+    />,
+    {
+      width: 64,
+      height: 29,
+      useMouse: true,
+      enableMouseMovement: true,
+    },
+  );
+
+  await renderOnce();
+
+  mockInput.pressKey("d", { ctrl: true });
+  await renderOnce();
+  mockInput.pressEnter();
+  await renderOnce();
+
+  const frame = captureCharFrame();
+  expect(frame).toContain("Save diagram as");
+  expect(frame).toContain("Path is required.");
+  expect(saveCount).toBe(0);
+});
+
+test("TermDrawApp shows a pending save state while a diagram save is in flight", async () => {
+  const pendingSave = {
+    resolve: null as (() => void) | null,
+  };
+
+  const { captureCharFrame, mockInput, renderOnce } = await testRender(
+    <TermDrawApp
+      width="100%"
+      height="100%"
+      autoFocus
+      showStartupLogo={false}
+      initialDocument={{
+        version: DRAW_DOCUMENT_VERSION,
+        objects: [],
+      }}
+      onSaveDiagram={async () => {
+        await new Promise<void>((resolve) => {
+          pendingSave.resolve = resolve;
+        });
+      }}
+    />,
+    {
+      width: 64,
+      height: 29,
+      useMouse: true,
+      enableMouseMovement: true,
+    },
+  );
+
+  await renderOnce();
+
+  mockInput.pressKey("d", { ctrl: true });
+  await renderOnce();
+  for (const char of "diagram") {
+    mockInput.pressKey(char);
+  }
+  mockInput.pressEnter();
+  await renderOnce();
+
+  expect(captureCharFrame()).toContain("Saving...");
+
+  pendingSave.resolve?.();
+  await Promise.resolve();
+  await renderOnce();
+
+  expect(captureCharFrame()).not.toContain("Save diagram as");
+});
+
 test("TermDrawApp appends .td.json when saving a loaded diagram without an extension", async () => {
   let savedPath: string | null = null;
 

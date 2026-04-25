@@ -12,7 +12,7 @@ import type {
   PointerEventLike,
   TextBorderMode,
 } from "../draw-state.js";
-import { visibleCellCount } from "../text.js";
+import { splitGraphemes, visibleCellCount } from "../text.js";
 import {
   getColorSwatches,
   getContextualStyleButtons,
@@ -21,7 +21,12 @@ import {
   isInsideRect,
 } from "./layout.js";
 import { INK_COLORS } from "../draw-state.js";
-import type { AppLayout, ChromeMode } from "./types.js";
+import type {
+  AppLayout,
+  ChromeMode,
+  DiagramSavePromptKeyResult,
+  DiagramSavePromptState,
+} from "./types.js";
 import { TOOL_HOTKEYS } from "./theme.js";
 
 /** Describes the callbacks needed by the extracted input handlers. */
@@ -177,7 +182,7 @@ export function handleKeyPress(
     return true;
   }
 
-  if (name === "escape") {
+  if (name === "escape" || name === "esc") {
     key.preventDefault();
     state.clearSelection();
     requestRender();
@@ -416,4 +421,89 @@ export function handleKeyPress(
   }
 
   return false;
+}
+
+/** Handles keyboard input while the diagram save prompt is visible. */
+export function handleDiagramSavePromptKey(
+  key: KeyEvent,
+  prompt: DiagramSavePromptState | null,
+): DiagramSavePromptKeyResult {
+  if (!prompt) {
+    return {
+      handled: false,
+      prompt: null,
+    };
+  }
+
+  const name = key.name.toLowerCase();
+  if (name === "escape" || name === "esc") {
+    key.preventDefault();
+    return {
+      handled: true,
+      prompt: null,
+      statusMessage: "Save diagram cancelled.",
+    };
+  }
+
+  if (name === "enter" || name === "return") {
+    key.preventDefault();
+    const path = prompt.value.trim();
+    if (!path) {
+      return {
+        handled: true,
+        prompt: {
+          ...prompt,
+          error: "Path is required.",
+        },
+        statusMessage: "Diagram path is required.",
+      };
+    }
+
+    return {
+      handled: true,
+      prompt: {
+        ...prompt,
+        error: null,
+      },
+      submitPath: path,
+    };
+  }
+
+  if (name === "backspace") {
+    key.preventDefault();
+    const graphemes = splitGraphemes(prompt.value);
+    graphemes.pop();
+    return {
+      handled: true,
+      prompt: {
+        ...prompt,
+        value: graphemes.join(""),
+        error: null,
+      },
+    };
+  }
+
+  if (
+    !key.ctrl &&
+    !key.meta &&
+    !key.option &&
+    key.raw &&
+    !key.raw.startsWith("\u001b") &&
+    name !== "tab"
+  ) {
+    key.preventDefault();
+    return {
+      handled: true,
+      prompt: {
+        ...prompt,
+        value: prompt.value + key.raw,
+        error: null,
+      },
+    };
+  }
+
+  return {
+    handled: true,
+    prompt,
+  };
 }

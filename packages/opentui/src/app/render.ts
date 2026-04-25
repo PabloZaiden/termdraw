@@ -6,8 +6,14 @@
  */
 import { TextAttributes, type OptimizedBuffer } from "@opentui/core";
 import type { DrawState } from "../draw-state.js";
-import { padToWidth, truncateToCells, visibleCellCount } from "../text.js";
-import type { AppLayout, ColorSwatch, StyleButton, ToolButton } from "./types.js";
+import { padToWidth, visibleCellCount } from "../text.js";
+import type {
+  AppLayout,
+  ColorSwatch,
+  DiagramSavePromptLayout,
+  StyleButton,
+  ToolButton,
+} from "./types.js";
 import {
   BOX_STYLE_OPTIONS,
   BRUSH_OPTIONS,
@@ -415,65 +421,65 @@ export function drawCanvas(frameBuffer: OptimizedBuffer, state: DrawState): void
 /** Draws the minimal save-as prompt used for native diagram persistence. */
 export function drawDiagramSavePrompt(
   frameBuffer: OptimizedBuffer,
-  width: number,
-  height: number,
-  value: string | null,
-  error: string | null,
-  pending: boolean,
+  promptLayout: DiagramSavePromptLayout | null,
 ): void {
-  if (value === null) return;
+  if (!promptLayout) return;
 
-  const label = "Save diagram as";
-  const pathLine = pending ? "Saving..." : value;
-  const displayPath = pathLine.length > 0 ? pathLine : " ";
-  const errorLine = error ?? "Enter confirms • Esc cancels";
-  const contentWidth = Math.max(
-    24,
-    Math.min(
-      width - 6,
-      Math.max(
-        visibleCellCount(label),
-        visibleCellCount(displayPath),
-        visibleCellCount(errorLine),
-      ) + 2,
-    ),
+  drawHorizontalBorder(
+    frameBuffer,
+    promptLayout.width,
+    promptLayout.top,
+    "╭",
+    "╮",
+    promptLayout.left,
   );
-  const boxWidth = Math.max(10, contentWidth + 2);
-  const boxHeight = 5;
-  const left = Math.max(0, Math.floor((width - boxWidth) / 2));
-  const top = Math.max(0, Math.floor((height - boxHeight) / 2));
-  const pathText = padToWidth(displayPath, contentWidth);
-  const helperText = truncateToCells(padToWidth(errorLine, contentWidth), contentWidth);
-
-  drawHorizontalBorder(frameBuffer, boxWidth, top, "╭", "╮", left);
-  for (let y = 1; y < boxHeight - 1; y += 1) {
-    frameBuffer.setCell(left, top + y, "│", COLORS.border, COLORS.panel);
-    frameBuffer.drawText(" ".repeat(boxWidth - 2), left + 1, top + y, COLORS.text, COLORS.panel);
-    frameBuffer.setCell(left + boxWidth - 1, top + y, "│", COLORS.border, COLORS.panel);
+  for (let y = 1; y < promptLayout.height - 1; y += 1) {
+    frameBuffer.setCell(promptLayout.left, promptLayout.top + y, "│", COLORS.border, COLORS.panel);
+    frameBuffer.drawText(
+      " ".repeat(promptLayout.width - 2),
+      promptLayout.left + 1,
+      promptLayout.top + y,
+      COLORS.text,
+      COLORS.panel,
+    );
+    frameBuffer.setCell(
+      promptLayout.left + promptLayout.width - 1,
+      promptLayout.top + y,
+      "│",
+      COLORS.border,
+      COLORS.panel,
+    );
   }
-  drawHorizontalBorder(frameBuffer, boxWidth, top + boxHeight - 1, "╰", "╯", left);
+  drawHorizontalBorder(
+    frameBuffer,
+    promptLayout.width,
+    promptLayout.top + promptLayout.height - 1,
+    "╰",
+    "╯",
+    promptLayout.left,
+  );
 
   frameBuffer.drawText(
-    padToWidth(label, contentWidth),
-    left + 1,
-    top + 1,
+    padToWidth(promptLayout.label, promptLayout.contentWidth),
+    promptLayout.left + 1,
+    promptLayout.top + 1,
     COLORS.text,
     COLORS.panel,
     TextAttributes.BOLD,
   );
   frameBuffer.drawText(
-    pathText,
-    left + 1,
-    top + 2,
+    promptLayout.pathText,
+    promptLayout.left + 1,
+    promptLayout.top + 2,
     COLORS.accent,
     COLORS.panel,
     TextAttributes.BOLD,
   );
   frameBuffer.drawText(
-    helperText,
-    left + 1,
-    top + 3,
-    error ? COLORS.warning : COLORS.dim,
+    promptLayout.helperText,
+    promptLayout.left + 1,
+    promptLayout.top + 3,
+    promptLayout.hasError ? COLORS.warning : COLORS.dim,
     COLORS.panel,
   );
 }
