@@ -3,18 +3,19 @@ import { ReadStream } from "node:tty";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import {
-  buildHelpText,
   formatSavedOutput,
   parseDrawDocument,
   TermDrawApp,
   type DrawDocument,
-} from "../../opentui/src/index.js";
+} from "@termdraw/opentui";
+import packageJson from "../package.json";
 
 export interface CliOptions {
   diagramPath?: string;
   outputPath?: string;
   fenced: boolean;
   help: boolean;
+  version: boolean;
 }
 
 type StdinLike = NodeJS.ReadableStream & {
@@ -31,6 +32,7 @@ export function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     fenced: false,
     help: false,
+    version: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -38,6 +40,11 @@ export function parseArgs(argv: string[]): CliOptions {
 
     if (arg === "-h" || arg === "--help") {
       options.help = true;
+      continue;
+    }
+
+    if (arg === "-v" || arg === "--version") {
+      options.version = true;
       continue;
     }
 
@@ -129,11 +136,29 @@ function formatDiagramDocument(document: DrawDocument): string {
   return `${JSON.stringify(document, null, 2)}\n`;
 }
 
+export function buildCliHelpText(binaryName = "termdraw"): string {
+  return (
+    `${binaryName} [--diagram file|-] [--output file] [--fenced|--plain] [--version]\n\n` +
+    `Options:\n` +
+    `  --diagram <file|->   load a .td.json diagram file or read one from stdin\n` +
+    `  -o, --output <file>  write the rendered result to a file\n` +
+    `  --fenced             output as a fenced markdown code block\n` +
+    `  --plain              output plain text (default)\n` +
+    `  -v, --version        show the current version\n` +
+    `  -h, --help           show this help\n`
+  );
+}
+
 export async function runTermDrawAppCli(argv = Bun.argv.slice(2)): Promise<void> {
   const options = parseArgs(argv);
 
   if (options.help) {
-    process.stdout.write(buildHelpText("termdraw"));
+    process.stdout.write(buildCliHelpText("termdraw"));
+    return;
+  }
+
+  if (options.version) {
+    process.stdout.write(`${packageJson.version}\n`);
     return;
   }
 
