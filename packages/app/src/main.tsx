@@ -1,17 +1,20 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { buildHelpText, formatSavedOutput, TermDrawApp } from "@termdraw/opentui";
+import packageJson from "../package.json";
 
 export interface CliOptions {
   outputPath?: string;
   fenced: boolean;
   help: boolean;
+  version?: boolean;
 }
 
 export function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     fenced: false,
     help: false,
+    version: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -19,6 +22,11 @@ export function parseArgs(argv: string[]): CliOptions {
 
     if (arg === "-h" || arg === "--help") {
       options.help = true;
+      continue;
+    }
+
+    if (arg === "-v" || arg === "--version") {
+      options.version = true;
       continue;
     }
 
@@ -57,6 +65,11 @@ export async function runTermDrawAppCli(argv = Bun.argv.slice(2)): Promise<void>
 
   if (options.help) {
     process.stdout.write(buildHelpText("termdraw"));
+    return;
+  }
+
+  if (options.version) {
+    process.stdout.write(`${packageJson.version}\n`);
     return;
   }
 
