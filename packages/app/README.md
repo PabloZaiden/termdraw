@@ -31,6 +31,12 @@ Draw something, then press `Enter` or `Ctrl+S` to write the result to stdout.
 ## Usage
 
 ```bash
+# load an editable native document from a file
+termdraw --load architecture.td.json
+
+# load from stdin, then continue interactively on the controlling terminal
+cat architecture.td.json | termdraw --load -
+
 # save plain text directly to a file
 termdraw --output diagram.txt
 
@@ -42,6 +48,8 @@ termdraw --help
 ```
 
 termDRAW! outputs terminal text, not SVG or bitmap graphics.
+
+Use native `.td.json` documents when you want load/save round-tripping for the editable object model. If you load from stdin, termDRAW still needs a controlling terminal for the interactive session; use `--load <file>` when no TTY is available.
 
 ## OpenTUI package
 

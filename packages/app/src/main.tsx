@@ -24,6 +24,9 @@ type StdinLike = NodeJS.ReadableStream & {
   setEncoding(encoding: BufferEncoding): void;
 };
 
+const STDIN_LOAD_REQUIRES_TTY_MESSAGE =
+  "Interactive editing from stdin requires a controlling terminal. Use --load <file> instead.";
+
 function openInteractiveStdin(): NodeJS.ReadStream {
   return new ReadStream(openSync("/dev/tty", "r"));
 }
@@ -68,7 +71,7 @@ export function parseArgs(argv: string[]): CliOptions {
       continue;
     }
 
-    if (arg === "--diagram") {
+    if (arg === "--load") {
       const diagramPath = argv[i + 1];
       if (!diagramPath) {
         throw new Error(`Missing value for ${arg}`);
@@ -110,6 +113,24 @@ export function shouldUseInteractiveTtyInput(
   return diagramPath === "-" && !stdin.isTTY;
 }
 
+export function getInteractiveStdin(
+  diagramPath: string | undefined,
+  stdin: Pick<StdinLike, "isTTY"> = process.stdin,
+  openStdin: () => NodeJS.ReadStream = openInteractiveStdin,
+): NodeJS.ReadStream | null {
+  if (!shouldUseInteractiveTtyInput(diagramPath, stdin)) {
+    return null;
+  }
+
+  try {
+    return openStdin();
+  } catch (error) {
+    throw new Error(STDIN_LOAD_REQUIRES_TTY_MESSAGE, {
+      cause: error instanceof Error ? error : new Error(String(error)),
+    });
+  }
+}
+
 export async function loadDiagramInput(
   path: string,
   readFromStdin: () => Promise<string> = readTextFromStdin,
@@ -138,9 +159,9 @@ function formatDiagramDocument(document: DrawDocument): string {
 
 export function buildCliHelpText(binaryName = "termdraw"): string {
   return (
-    `${binaryName} [--diagram file|-] [--output file] [--fenced|--plain] [--version]\n\n` +
+    `${binaryName} [--load file|-] [--output file] [--fenced|--plain] [--version]\n\n` +
     `Options:\n` +
-    `  --diagram <file|->   load a .td.json diagram file or read one from stdin\n` +
+    `  --load <file|->      load a .td.json diagram file or read one from stdin\n` +
     `  -o, --output <file>  write the rendered result to a file\n` +
     `  --fenced             output as a fenced markdown code block\n` +
     `  --plain              output plain text (default)\n` +
@@ -167,9 +188,7 @@ export async function runTermDrawAppCli(argv = Bun.argv.slice(2)): Promise<void>
     : undefined;
   const initialDiagramPath =
     options.diagramPath && options.diagramPath !== "-" ? options.diagramPath : undefined;
-  const interactiveStdin = shouldUseInteractiveTtyInput(options.diagramPath)
-    ? openInteractiveStdin()
-    : null;
+  const interactiveStdin = getInteractiveStdin(options.diagramPath);
 
   let renderer;
   try {

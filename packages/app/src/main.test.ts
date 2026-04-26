@@ -7,6 +7,7 @@ import packageJson from "../package.json";
 import { DRAW_DOCUMENT_VERSION } from "../../opentui/src/index";
 import {
   buildCliHelpText,
+  getInteractiveStdin,
   loadDiagramInput,
   parseArgs,
   readTextFromStdin,
@@ -24,8 +25,8 @@ afterEach(() => {
   }
 });
 
-test("parseArgs accepts --diagram alongside existing output options", () => {
-  expect(parseArgs(["--diagram", "drawing.td.json", "--fenced", "--output", "art.txt"])).toEqual({
+test("parseArgs accepts --load alongside existing output options", () => {
+  expect(parseArgs(["--load", "drawing.td.json", "--fenced", "--output", "art.txt"])).toEqual({
     diagramPath: "drawing.td.json",
     fenced: true,
     help: false,
@@ -51,7 +52,7 @@ test("parseArgs accepts --version and -v", () => {
 test("buildCliHelpText only shows CLI options", () => {
   const help = buildCliHelpText();
 
-  expect(help).toContain("--diagram");
+  expect(help).toContain("--load");
   expect(help).toContain("--version");
   expect(help).toContain("--output");
   expect(help).not.toContain("Controls:");
@@ -95,7 +96,7 @@ test("loadDiagramInput reads and parses a diagram file", async () => {
   });
 });
 
-test("loadDiagramInput reads stdin when --diagram - is used", async () => {
+test("loadDiagramInput reads stdin when --load - is used", async () => {
   await expect(
     loadDiagramInput("-", async () =>
       JSON.stringify({
@@ -130,10 +131,22 @@ test("readTextFromStdin drains and pauses stdin", async () => {
   expect(paused).toBe(true);
 });
 
-test("shouldUseInteractiveTtyInput only swaps stdin for piped diagram input", () => {
+test("shouldUseInteractiveTtyInput only swaps stdin for piped load input", () => {
   expect(shouldUseInteractiveTtyInput("-", { isTTY: false })).toBe(true);
   expect(shouldUseInteractiveTtyInput("-", { isTTY: true })).toBe(false);
   expect(shouldUseInteractiveTtyInput("diagram.td.json", { isTTY: false })).toBe(false);
+});
+
+test("getInteractiveStdin surfaces a clear error without a controlling terminal", () => {
+  const ttyError = new Error("ENXIO: no such device or address, open '/dev/tty'");
+
+  expect(() =>
+    getInteractiveStdin("-", { isTTY: false }, () => {
+      throw ttyError;
+    }),
+  ).toThrow(
+    "Interactive editing from stdin requires a controlling terminal. Use --load <file> instead.",
+  );
 });
 
 test("loadDiagramInput surfaces clear parse errors", async () => {

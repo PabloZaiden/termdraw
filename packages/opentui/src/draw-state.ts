@@ -1156,9 +1156,7 @@ export class DrawState {
   /** Replaces the current editable scene from a validated termDRAW document. */
   public loadDocument(document: DrawDocument): void {
     const validatedDocument = validateDrawDocument(document);
-    const nextObjects = cloneObjects(validatedDocument.objects).map((object) =>
-      this.shiftObjectInsideCanvas(object),
-    );
+    const nextObjects = cloneObjects(validatedDocument.objects);
 
     this.objects = this.recomputeParentAssignments(nextObjects);
     this.selectedObjectIds = [];

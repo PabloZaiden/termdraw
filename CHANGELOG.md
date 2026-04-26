@@ -6,7 +6,7 @@ All notable user-visible changes to this project are documented in this file.
 
 ### Added
 
-- Added native `.td.json` diagram documents that can be opened with `termdraw --diagram <file>` or `termdraw --diagram -`.
+- Added native `.td.json` diagram documents that can be opened with `termdraw --load <file>` or `termdraw --load -`.
 
 ### Changed
 

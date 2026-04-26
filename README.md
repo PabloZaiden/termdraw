@@ -48,19 +48,20 @@ termdraw
 
 Draw something, then press `Enter` or `Ctrl+S` to export the rendered art to stdout.
 
-Press `Ctrl+D` to save the editable diagram as a native `.td.json` document. If you opened a diagram with `--diagram`, termDRAW reuses that path by default; otherwise it prompts for one inside the app.
+Press `Ctrl+D` to save the editable diagram as a native `.td.json` document. If you opened a diagram with `--load`, termDRAW reuses that path by default; otherwise it prompts for one inside the app.
 
 ## App usage
 
 ```bash
 # open an editable native document from a file
-termdraw --diagram architecture.td.json
+termdraw --load architecture.td.json
 
 # open an editable native document from stdin
-cat architecture.td.json | termdraw --diagram -
+# requires a controlling terminal for the interactive editor session
+cat architecture.td.json | termdraw --load -
 
 # save the rendered art directly to a file
-termdraw --diagram architecture.td.json --output diagram.txt
+termdraw --load architecture.td.json --output diagram.txt
 
 # save plain text directly to a file
 termdraw --output diagram.txt
