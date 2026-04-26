@@ -881,6 +881,32 @@ describe("DrawState", () => {
     expect(state.currentStatus).toContain("Loaded diagram with 2 objects");
   });
 
+  test("loadDocument preserves stored coordinates for native documents", () => {
+    const document = {
+      version: DRAW_DOCUMENT_VERSION,
+      objects: [
+        {
+          id: "obj-10",
+          type: "box" as const,
+          z: 1,
+          parentId: null,
+          color: "cyan" as const,
+          left: 18,
+          top: 7,
+          right: 23,
+          bottom: 11,
+          style: "light" as const,
+        },
+      ],
+    };
+
+    const state = new DrawState(20, 10);
+    state.loadDocument(document);
+
+    expect(state.exportDocument()).toEqual(document);
+    expect(state.currentStatus).toContain("Loaded diagram with 1 object");
+  });
+
   test("parseDrawDocument rejects invalid document shapes with clear errors", () => {
     expect(() =>
       parseDrawDocument(

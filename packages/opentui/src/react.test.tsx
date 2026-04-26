@@ -122,7 +122,7 @@ test("help text documents tool hotkeys and automatic line rendering", () => {
   expect(help).toContain("B / A / U / P / T");
   expect(help).toContain("choose Smooth (Braille-aware), Single, or Double line stencils");
   expect(help).toContain("choose from preset brush stencils in the palette");
-  expect(help).toContain("--diagram <file>");
+  expect(help).toContain("--load <file>");
   expect(help).toContain("Ctrl+D          save diagram (.td.json)");
   expect(help).toContain(
     "Shift + drag    constrain line creation/editing to horizontal or vertical",

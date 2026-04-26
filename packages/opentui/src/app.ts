@@ -456,7 +456,7 @@ export function formatSavedOutput(art: string, fenced: boolean): string {
 /** Builds the CLI help text shown by the standalone termDRAW app. */
 export function buildHelpText(binaryName = "termdraw"): string {
   return truncateToCells(
-    `${binaryName} [--diagram file.td.json|-] [--output file] [--fenced|--plain]\n\n` +
+    `${binaryName} [--load file.td.json|-] [--output file] [--fenced|--plain]\n\n` +
       `Controls:\n` +
       `  right palette   click Select / Box / Line / Brush / Text, box styles, and colors\n` +
       `  Ctrl+T / Tab    cycle select / box / line / brush / text\n` +
@@ -480,8 +480,8 @@ export function buildHelpText(binaryName = "termdraw"): string {
       `  Enter / Ctrl+S  export art\n` +
       `  Ctrl+D          save diagram (.td.json), prompting for a path when needed\n\n` +
       `Options:\n` +
-      `  --diagram <file>    open a native termDRAW document from a file\n` +
-      `  --diagram -         read a native termDRAW document from stdin\n` +
+      `  --load <file>       open a native termDRAW document from a file\n` +
+      `  --load -            read a native termDRAW document from stdin\n` +
       `  -o, --output <file>  write the result to a file\n` +
       `  --fenced            output as a fenced markdown code block\n` +
       `  --plain             output plain text (default)\n` +
