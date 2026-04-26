@@ -80,6 +80,9 @@ Run the smallest relevant set first, then the broader workspace checks before fi
 - Keep all publishable packages on the exact same version at release time.
 - When bumping versions, update every publishable package together and also update internal workspace dependency pins to the same version.
 - For this repo, release `@termdraw/opentui`, `@termdraw/app`, and `@termdraw/pi` as a coordinated set unless there is an explicit reason not to.
+- Use repo-level coordinated releases: create one root Git tag and one GitHub release per shared version, in the form `vX.Y.Z`.
+- Publish all three packages for every coordinated release, even if one package had no code changes in that cut.
+- Do not use package-specific release tags like `app-vX.Y.Z`, `opentui-vX.Y.Z`, or `pi-vX.Y.Z` for official releases.
 - Before publishing, verify package versions are identical across all publishable packages.
 
 ## Commit conventions
