@@ -75,7 +75,7 @@ termdraw --help
 
 termDRAW! outputs terminal text, not SVG or bitmap graphics.
 
-Use native `.td.json` documents when you want to reopen and keep editing a drawing. Native load/save preserves stored object coordinates unless you change them in the editor. Plain-text output remains an export format and does not preserve the original object metadata.
+Use native `.td.json` documents when you want to reopen and keep editing a drawing. Plain-text output remains an export format and does not preserve the original object metadata.
 
 ## Use it in Pi
 

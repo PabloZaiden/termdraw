@@ -11,12 +11,8 @@ All notable user-visible changes to this project are documented in this file.
 ### Changed
 
 - Split rendered-art export from native diagram saving in the app: Enter/Ctrl+S still exports art, while Ctrl+D saves the editable diagram and prompts for a path when needed.
-- Renamed the native document CLI flag from `--diagram` to `--load`.
 
 ### Fixed
-
-- Preserved stored object coordinates when loading native `.td.json` documents so load/save round-trips no longer rewrite positions.
-- Replaced the raw `/dev/tty` failure from stdin-based loading without a controlling terminal with a clearer message that explains `--load -` still needs a TTY and that `--load <file>` should be used otherwise.
 
 ## [0.3.4]
 
