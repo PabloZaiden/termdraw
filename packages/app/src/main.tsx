@@ -1,6 +1,6 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { buildHelpText, formatSavedOutput, TermDrawApp } from "@termdraw/opentui";
+import { formatSavedOutput, TermDrawApp } from "@termdraw/opentui";
 import packageJson from "../package.json";
 
 export interface CliOptions {
@@ -60,11 +60,23 @@ function withTrailingNewline(text: string): string {
   return text.endsWith("\n") ? text : `${text}\n`;
 }
 
+export function buildCliHelpText(binaryName = "termdraw"): string {
+  return (
+    `${binaryName} [--output file] [--fenced|--plain] [--version]\n\n` +
+    `Options:\n` +
+    `  -o, --output <file>  write the result to a file\n` +
+    `  --fenced            output as a fenced markdown code block\n` +
+    `  --plain             output plain text (default)\n` +
+    `  -v, --version       show the current version\n` +
+    `  -h, --help          show this help\n`
+  );
+}
+
 export async function runTermDrawAppCli(argv = Bun.argv.slice(2)): Promise<void> {
   const options = parseArgs(argv);
 
   if (options.help) {
-    process.stdout.write(buildHelpText("termdraw"));
+    process.stdout.write(buildCliHelpText("termdraw"));
     return;
   }
 

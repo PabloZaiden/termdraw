@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseArgs, runTermDrawAppCli } from "./main";
+import { buildCliHelpText, parseArgs, runTermDrawAppCli } from "./main";
 
 test("parseArgs accepts --version and -v", () => {
   expect(parseArgs(["--version"])).toEqual({
@@ -13,6 +13,16 @@ test("parseArgs accepts --version and -v", () => {
     help: false,
     version: true,
   });
+});
+
+test("buildCliHelpText only shows CLI options", () => {
+  const help = buildCliHelpText();
+
+  expect(help).toContain("--version");
+  expect(help).toContain("--output");
+  expect(help).not.toContain("Controls:");
+  expect(help).not.toContain("right palette");
+  expect(help).not.toContain("Ctrl+T / Tab");
 });
 
 test("runTermDrawAppCli prints the current version", async () => {
