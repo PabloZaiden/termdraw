@@ -1,6 +1,6 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { buildHelpText, formatSavedOutput, TermDrawApp } from "../../opentui/src/index.js";
+import { buildHelpText, formatSavedOutput, TermDrawApp } from "@termdraw/opentui";
 
 export interface CliOptions {
   outputPath?: string;

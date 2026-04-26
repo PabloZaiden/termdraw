@@ -10,6 +10,8 @@ All notable user-visible changes to this project are documented in this file.
 
 ### Fixed
 
+- Pinned OpenTUI runtime dependencies to exact versions so packaged and globally installed `termdraw` builds keep the bundled CLI and native runtime aligned.
+
 ## [0.3.3]
 
 ### Added

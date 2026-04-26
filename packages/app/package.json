@@ -60,8 +60,8 @@
     "lint:fix": "oxlint --fix ."
   },
   "dependencies": {
-    "@opentui/core": "^0.1.97",
-    "@opentui/react": "^0.1.97",
+    "@opentui/core": "0.1.97",
+    "@opentui/react": "0.1.97",
     "@termdraw/opentui": "0.3.3",
     "react": "^19.2.5"
   },
