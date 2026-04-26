@@ -50,6 +50,7 @@
     "build:lib": "tsc -p tsconfig.build.json",
     "build:cli": "bun build src/cli.tsx --outdir dist --target=bun && chmod +x dist/cli.js",
     "check": "bun run format:check && bun run lint && bun run typecheck",
+    "test:integration": "bun test test/integration",
     "pack:check": "bun run build && npm pack --dry-run --ignore-scripts",
     "prepack": "bun run build",
     "prepublishOnly": "bun run lint && bun run typecheck",
@@ -70,6 +71,7 @@
     "@types/react": "^19.2.14",
     "oxfmt": "^0.44.0",
     "oxlint": "^1.59.0",
+    "tuistory": "^0.3.0",
     "typescript": "^5.9.3"
   },
   "engines": {

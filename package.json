@@ -10,6 +10,7 @@
     "clean": "rm -rf dist packages/app/dist packages/opentui/dist",
     "build": "cd packages/opentui && bun run build && cd ../app && bun run build",
     "test": "cd packages/opentui && bun test",
+    "test:integration": "cd packages/app && bun run test:integration",
     "typecheck": "cd packages/opentui && bun run typecheck && cd ../app && bun run typecheck && cd ../pi && bun run typecheck",
     "pack:check": "cd packages/opentui && bun run pack:check && cd ../app && bun run pack:check && cd ../pi && bun run pack:check",
     "smoke:pi": "cd packages/pi && bun run smoke:pi",
@@ -28,6 +29,7 @@
     "oxfmt": "^0.44.0",
     "oxlint": "^1.59.0",
     "simple-git-hooks": "^2.13.1",
+    "tuistory": "^0.3.0",
     "typescript": "^5.9.3"
   },
   "simple-git-hooks": {
