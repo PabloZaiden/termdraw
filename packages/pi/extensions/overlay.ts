@@ -16,8 +16,9 @@ import {
 
 const TERM_DRAW_ISLAND_MODULE_URL = new URL("../islands/termdraw.island.tsx", import.meta.url);
 const PI_FOOTER_TEXT =
-  "B Brush • A Select • U Box • P Line • T Text • Enter/Ctrl+S Insert • Ctrl+Q Cancel";
-const READY_STATUS = "termDRAW ready. Press Enter or Ctrl+S to insert into Pi. Ctrl+Q cancels.";
+  "B Brush • A Select • U Box • P Line • T Text • Enter/Ctrl+S Insert • Ctrl+Q/Ctrl+C Cancel";
+const READY_STATUS =
+  "termDRAW ready. Press Enter or Ctrl+S to insert into Pi. Ctrl+Q or Ctrl+C cancels.";
 const LOADING_STATUS = "Starting termDRAW in a Bun sidecar…";
 const INSERTED_MESSAGE = "Inserted drawing into editor.";
 const CANCELLED_MESSAGE = "Drawing cancelled.";
@@ -48,6 +49,10 @@ function isTermDrawCancelEvent(event: OpenTuiBridgeEvent): event is TermDrawCanc
 function padLine(text: string, width: number): string {
   const truncated = truncateToWidth(text, width, "", true);
   return truncated + " ".repeat(Math.max(0, width - visibleWidth(truncated)));
+}
+
+function isOverlayCancelShortcut(data: string): boolean {
+  return matchesKey(data, "ctrl+q") || matchesKey(data, "ctrl+c");
 }
 
 function formatError(error: unknown): string {
@@ -141,10 +146,12 @@ class TermDrawOverlay implements Component {
   }
 
   handleInput(data: string): void {
-    if (
-      this.error &&
-      (matchesKey(data, "ctrl+q") || matchesKey(data, "escape") || matchesKey(data, "ctrl+c"))
-    ) {
+    if (isOverlayCancelShortcut(data)) {
+      void this.close({ kind: "cancel" });
+      return;
+    }
+
+    if (this.error && matchesKey(data, "escape")) {
       void this.close({ kind: "cancel" });
       return;
     }
@@ -183,7 +190,7 @@ class TermDrawOverlay implements Component {
 
       return [
         ...body,
-        padLine(this.theme.fg("warning", "Ctrl+Q, Esc, or Ctrl+C closes."), normalizedWidth),
+        padLine(this.theme.fg("warning", "Ctrl+Q, Ctrl+C, or Esc closes."), normalizedWidth),
       ];
     }
 
