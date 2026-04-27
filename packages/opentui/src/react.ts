@@ -1,6 +1,11 @@
 import React from "react";
-import { extend, type ExtendedComponentProps } from "@opentui/react";
-import { TermDrawAppRenderable, TermDrawEditorRenderable } from "./app.js";
+import { extend } from "@opentui/react";
+import {
+  TermDrawAppRenderable,
+  TermDrawEditorRenderable,
+  type TermDrawAppRenderableOptions,
+  type TermDrawEditorRenderableOptions,
+} from "./app.js";
 
 export const TERM_DRAW_COMPONENT_NAME = "term-draw";
 export const TERM_DRAW_APP_COMPONENT_NAME = "term-draw-app";
@@ -30,9 +35,9 @@ declare module "@opentui/react" {
   }
 }
 
-export type TermDrawProps = ExtendedComponentProps<typeof TermDrawAppRenderable>;
-export type TermDrawAppProps = ExtendedComponentProps<typeof TermDrawAppRenderable>;
-export type TermDrawEditorProps = ExtendedComponentProps<typeof TermDrawEditorRenderable>;
+export type TermDrawProps = TermDrawAppRenderableOptions;
+export type TermDrawAppProps = TermDrawAppRenderableOptions;
+export type TermDrawEditorProps = TermDrawEditorRenderableOptions;
 
 export function TermDraw(props: TermDrawProps): React.ReactElement {
   registerTermDrawComponent();
