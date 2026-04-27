@@ -29,9 +29,14 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+type TermDrawReadyEvent = OpenTuiBridgeEvent<"ready", { ready?: boolean }>;
 type TermDrawSaveEvent = OpenTuiBridgeEvent<"save", { art: string }>;
 type TermDrawCancelEvent = OpenTuiBridgeEvent<"cancel", { reason?: string }>;
 type TermDrawOverlayResult = { kind: "save"; art: string } | { kind: "cancel" };
+
+function isTermDrawReadyEvent(event: OpenTuiBridgeEvent): event is TermDrawReadyEvent {
+  return event.type === "ready";
+}
 
 function isTermDrawSaveEvent(event: OpenTuiBridgeEvent): event is TermDrawSaveEvent {
   return (
@@ -101,6 +106,15 @@ class TermDrawOverlay implements Component {
         },
       });
       this.unsubscribeFromEvents = this.surface.onEvent((event) => {
+        if (isTermDrawReadyEvent(event)) {
+          this.status = READY_STATUS;
+          if (this.smokeText.length > 0) {
+            void this.runSmokeAutomation();
+          }
+          this.tui.requestRender();
+          return;
+        }
+
         if (isTermDrawSaveEvent(event)) {
           void this.close({ kind: "save", art: event.payload.art });
           return;
@@ -118,11 +132,6 @@ class TermDrawOverlay implements Component {
         height: this.surfaceHeight,
       });
       await this.surface.sync(this.width);
-      await this.surface.waitUntilReady();
-      this.status = READY_STATUS;
-      if (this.smokeText.length > 0) {
-        void this.runSmokeAutomation();
-      }
     } catch (error) {
       this.error = formatError(error);
       this.status = `${ERROR_PREFIX} ${this.error}`;

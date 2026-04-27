@@ -89,7 +89,8 @@ main() {
 
   printf -- 'Opening /termdraw...\n'
   tmux send-keys -t "${PANE_TARGET}" '/termdraw' Enter
-  wait_for_text 'termDRAW ready.' 30
+  wait_for_text 'termDRAW!' 30
+  wait_for_text 'B Brush • A Select • U Box • P Line • T Text' 30
 
   tmux send-keys -t "${PANE_TARGET}" Enter
   wait_for_text 'Inserted drawing into editor.' 30
