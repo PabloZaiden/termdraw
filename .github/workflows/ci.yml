@@ -37,6 +37,9 @@ jobs:
       - name: Run tests
         run: bun run test
 
+      - name: Run integration tests
+        run: bun run test:integration
+
       - name: Typecheck
         run: bun run typecheck
 

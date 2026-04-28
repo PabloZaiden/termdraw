@@ -8,5 +8,10 @@
       "@termdraw/opentui": ["../opentui/src/index.ts"]
     }
   },
-  "include": ["extensions/**/*.ts", "extensions/**/*.test.ts", "islands/**/*.tsx"]
+  "include": [
+    "extensions/**/*.ts",
+    "extensions/**/*.test.ts",
+    "islands/**/*.tsx",
+    "../../types/**/*.d.ts"
+  ]
 }

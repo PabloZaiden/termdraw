@@ -1,5 +1,8 @@
 {
   "extends": "../../tsconfig.json",
-  "include": ["index.ts", "src/**/*.ts", "src/**/*.tsx"],
+  "compilerOptions": {
+    "types": ["bun"]
+  },
+  "include": ["index.ts", "src/**/*.ts", "src/**/*.tsx", "../../types/**/*.d.ts"],
   "exclude": ["dist"]
 }
