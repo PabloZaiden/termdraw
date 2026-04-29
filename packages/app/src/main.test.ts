@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { version as appVersion } from "../package.json";
 import { buildCliHelpText, parseArgs, runTermDrawAppCli } from "./main";
 
 test("parseArgs accepts --version and -v", () => {
@@ -80,7 +81,7 @@ test("runTermDrawAppCli prints the current version", async () => {
     process.stdout.write = originalWrite;
   }
 
-  expect(stdoutWrites.join("")).toBe("0.3.4\n");
+  expect(stdoutWrites.join("")).toBe(`${appVersion}\n`);
 });
 
 test("with --output parseArgs records the destination path", () => {

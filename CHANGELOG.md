@@ -10,6 +10,22 @@ All notable user-visible changes to this project are documented in this file.
 
 ### Fixed
 
+## [0.3.5]
+
+### Added
+
+- Added `--version` and `-v` to the standalone `termdraw` CLI.
+- Added a tuistory-backed `packages/app` integration test suite and wired it into CI.
+
+### Changed
+
+- Trimmed `termdraw --help` so it shows CLI-relevant options instead of in-app control help.
+- Expanded workspace test coverage and made the root `test` script run all package test suites.
+
+### Fixed
+
+- Improved Pi smoke readiness by waiting on more stable mounted editor signals and reacting to an explicit island ready event.
+
 ## [0.3.4]
 
 ### Added
