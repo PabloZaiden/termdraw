@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, expect, test } from "bun:test";
-import packageJson from "../package.json";
+import { version as appVersion } from "../package.json";
 import { DRAW_DOCUMENT_VERSION } from "../../opentui/src/index";
 import {
   buildCliHelpText,
@@ -112,7 +112,7 @@ test("runTermDrawAppCli prints the current version", async () => {
     process.stdout.write = originalWrite;
   }
 
-  expect(stdoutWrites.join("")).toBe(`${packageJson.version}\n`);
+  expect(stdoutWrites.join("")).toBe(`${appVersion}\n`);
 });
 
 test("loadDiagramInput reads and parses a diagram file", async () => {
